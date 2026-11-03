@@ -11,7 +11,8 @@ For first-time computer setup (Node, PostgreSQL, creating the `rideshare` databa
 Run these inside `server/`:
 
 ```bash
-npm install                  # installs packages and runs `prisma generate`
+npm install                  # installs packages
+npx prisma generate          # creates the Prisma client (npm 11+ skips the postinstall script)
 cp .env.example .env         # Windows PowerShell: Copy-Item .env.example .env
 # edit .env and set DATABASE_URL for your computer
 npx prisma migrate deploy    # creates the tables
