@@ -131,8 +131,11 @@ If `git clone git@github.com:...` fails, you have not set up an SSH key. Use `ht
 
 ```bash
 cd server
-npm install                # also runs `prisma generate` automatically
+npm install
+npx prisma generate        # creates the Prisma client in src/generated/prisma
 ```
+
+Run `npx prisma generate` yourself even though `package.json` has a `postinstall` script for it. Recent npm versions (11+) skip install scripts until you approve them, and print `npm warn install-scripts` instead.
 
 Create your own `server/.env` from the example:
 
@@ -252,7 +255,7 @@ main  ──●──────────●──────────�
    Branch names: `feature/<short-name>` for new things, `fix/<short-name>` for bug fixes, `docs/<short-name>` for documentation.
 3. **After pulling, sync your setup.** Someone may have added packages or changed the database:
    ```bash
-   cd server && npm install && npx prisma migrate deploy
+   cd server && npm install && npx prisma generate && npx prisma migrate deploy
    cd ../mccab_mobile && npm install
    ```
 4. **Work and commit often**, in small commits with clear messages:
@@ -334,7 +337,7 @@ Teammates: the [GitHub Student Developer Pack](https://education.github.com/pack
 | `npm run dev` fails with `Can't reach database server` / `ECONNREFUSED 5432` | Postgres isn't running. macOS: `brew services start postgresql@18`. Linux: `sudo systemctl start postgresql`. Windows: start "postgresql-x64-18" in the Services app. |
 | `database "rideshare" does not exist` | Create it: `createdb rideshare` (macOS/Linux) or `CREATE DATABASE rideshare;` in SQL Shell (Windows). |
 | `password authentication failed` | Wrong user or password in `DATABASE_URL`. See the table in section 2. |
-| `Cannot find module '../generated/prisma/client'` | Run `npx prisma generate` inside `server/`. |
+| `Cannot find module '../generated/prisma/client'` | Run `npx prisma generate` inside `server/`. `npm install` doesn't do it on npm 11+, which skips install scripts. |
 | Errors about missing tables or columns after pulling | Run `npx prisma migrate deploy` inside `server/`. |
 | `Port 3000 is already in use` | Another server is running. Stop it, or set `PORT=3001` in `server/.env` (and update `EXPO_PUBLIC_API_URL`). |
 | App loads but API calls fail (`Network request failed`) | Check that `EXPO_PUBLIC_API_URL` uses your current LAN IP (not `localhost`), that the server is running, and that both devices are on the same Wi-Fi. Restart with `npx expo start -c`. On Windows, allow Node.js through the firewall when asked, or in Windows Defender Firewall settings. |
