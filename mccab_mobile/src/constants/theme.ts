@@ -1,3 +1,4 @@
+import { createContext, createElement, useContext, useState, type ReactNode } from "react";
 import { useColorScheme } from "react-native";
 
 const palette = {
@@ -30,7 +31,44 @@ const palette = {
 };
 
 export type Colors = typeof palette.light;
+export type ColorScheme = "light" | "dark";
+// "system" follows the phone's setting; "light" and "dark" override it.
+export type ThemePreference = "system" | ColorScheme;
+
+type ThemeContextValue = {
+  scheme: ColorScheme;
+  preference: ThemePreference;
+  setPreference: (preference: ThemePreference) => void;
+  toggleScheme: () => void;
+};
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+// TODO: persist the preference (e.g. with AsyncStorage) so it survives app restarts.
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const systemScheme = useColorScheme() === "dark" ? "dark" : "light";
+  const [preference, setPreference] = useState<ThemePreference>("system");
+
+  const scheme: ColorScheme = preference === "system" ? systemScheme : preference;
+
+  const value: ThemeContextValue = {
+    scheme,
+    preference,
+    setPreference,
+    toggleScheme: () => setPreference(scheme === "dark" ? "light" : "dark"),
+  };
+
+  return createElement(ThemeContext.Provider, { value }, children);
+}
+
+export function useTheme(): ThemeContextValue {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error("useTheme must be used inside <ThemeProvider>.");
+  }
+  return context;
+}
 
 export function useThemeColors(): Colors {
-  return useColorScheme() === "dark" ? palette.dark : palette.light;
+  return palette[useTheme().scheme];
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -7,54 +7,88 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TextField } from "@/components/text-field";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useThemeColors, type Colors } from "@/constants/theme";
 import { ApiError, login, type AuthUser } from "@/lib/api";
+import { createAuthStyles } from "@/styles/auth";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+type FieldErrors = {
+  email?: string;
+  password?: string;
+};
+
 export default function LoginScreen() {
   const colors = useThemeColors();
-  const styles = createStyles(colors);
+  const styles = createAuthStyles(colors);
+  const local = createLocalStyles(colors);
+  const insets = useSafeAreaInsets();
+
+  const passwordRef = useRef<TextInputInstance>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
 
-  async function handleSubmit() {
-    const trimmedEmail = email.trim().toLowerCase();
-
-    if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setError("Enter a valid email address.");
-      return;
+  function validate(trimmedEmail: string): FieldErrors {
+    const errors: FieldErrors = {};
+    if (trimmedEmail.length === 0) {
+      errors.email = "Enter your school email.";
+    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      errors.email = "Enter a valid email address, like you@school.edu.";
     }
     if (password.length === 0) {
-      setError("Enter your password.");
+      errors.password = "Enter your password.";
+    }
+    return errors;
+  }
+
+  async function handleSubmit() {
+    if (submitting) return;
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const errors = validate(trimmedEmail);
+    setFieldErrors(errors);
+    setFormError(null);
+    if (errors.email) return;
+    if (errors.password) {
+      passwordRef.current?.focus();
       return;
     }
 
-    setError(null);
     setSubmitting(true);
     try {
       const result = await login(trimmedEmail, password);
       // TODO: store result.token securely and navigate to the home screen.
       setUser(result.user);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+      setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, local.root]}>
+      {/* Decorative background shapes, tinted from the primary color. */}
+      <View style={[local.blob, local.blobTop]} />
+      <View style={[local.blob, local.blobBottom]} />
+
+      <View style={[local.topBar, { top: insets.top + 12 }]}>
+        <ThemeToggle />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -67,70 +101,101 @@ export default function LoginScreen() {
             <View style={styles.logo}>
               <Text style={styles.logoText}>M</Text>
             </View>
-            <Text style={styles.appName}>MCCab</Text>
+            <Text style={styles.appName} accessibilityRole="header">
+              MCCab
+            </Text>
             <Text style={styles.tagline}>Share rides to campus with fellow students</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.title}>Log in</Text>
+            <View style={styles.cardHeader}>
+              <Text style={styles.title} accessibilityRole="header">
+                Welcome back
+              </Text>
+              <Text style={styles.subtitle}>Sign in to find or offer your next ride.</Text>
+            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>School email</Text>
-              <TextInput
-                style={styles.input}
+            {formError ? (
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
+                <View style={local.errorIcon}>
+                  <Text style={local.errorIconText}>!</Text>
+                </View>
+                <Text style={styles.errorText}>{formError}</Text>
+              </View>
+            ) : null}
+
+            {user ? (
+              <View style={styles.successBox} accessibilityLiveRegion="polite">
+                <Text style={styles.successText}>Signed in as {user.name}.</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.form}>
+              <TextField
+                label="School email"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                error={fieldErrors.email}
                 placeholder="you@school.edu"
-                placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
                 keyboardType="email-address"
                 textContentType="emailAddress"
                 returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => passwordRef.current?.focus()}
                 editable={!submitting}
               />
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordRow}>
-                <TextInput
-                  style={[styles.input, styles.passwordInput]}
+              <View>
+                <TextField
+                  ref={passwordRef}
+                  label="Password"
+                  password
                   value={password}
-                  onChangeText={setPassword}
-                  placeholder="Your password"
-                  placeholderTextColor={colors.textMuted}
-                  secureTextEntry={!showPassword}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    if (fieldErrors.password) {
+                      setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                    }
+                  }}
+                  error={fieldErrors.password}
+                  placeholder="Enter your password"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  autoComplete="password"
+                  autoComplete="current-password"
                   textContentType="password"
                   returnKeyType="go"
                   onSubmitEditing={handleSubmit}
                   editable={!submitting}
                 />
                 <Pressable
-                  style={styles.showButton}
-                  onPress={() => setShowPassword((value) => !value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  hitSlop={8}
+                  style={styles.forgotLink}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/forgot-password",
+                      params: { email: email.trim() },
+                    })
+                  }
+                  accessibilityRole="link"
+                  disabled={submitting}
                 >
-                  <Text style={styles.showButtonText}>{showPassword ? "Hide" : "Show"}</Text>
+                  {({ pressed }) => (
+                    <Text style={[styles.inlineLink, pressed && styles.linkPressed]}>
+                      Forgot password?
+                    </Text>
+                  )}
                 </Pressable>
               </View>
             </View>
-
-            {error ? (
-              <View style={styles.errorBox} accessibilityRole="alert">
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            {user ? (
-              <Text style={styles.successText}>Logged in as {user.name}.</Text>
-            ) : null}
 
             <Pressable
               style={({ pressed }) => [
@@ -141,14 +206,34 @@ export default function LoginScreen() {
               onPress={handleSubmit}
               disabled={submitting}
               accessibilityRole="button"
+              accessibilityLabel={submitting ? "Signing in" : "Sign in"}
               accessibilityState={{ disabled: submitting, busy: submitting }}
             >
               {submitting ? (
-                <ActivityIndicator color={colors.onPrimary} />
+                <View style={local.buttonBusy}>
+                  <ActivityIndicator color={colors.onPrimary} size="small" />
+                  <Text style={styles.buttonText}>Signing in…</Text>
+                </View>
               ) : (
-                <Text style={styles.buttonText}>Log in</Text>
+                <Text style={styles.buttonText}>Sign in</Text>
               )}
             </Pressable>
+
+            <View style={styles.divider} />
+
+            <View style={[styles.footer, styles.footerInCard]}>
+              <Text style={styles.footerText}>Don&apos;t have an account?</Text>
+              <Pressable
+                style={styles.footerLinkHit}
+                onPress={() => router.push("/signup")}
+                accessibilityRole="link"
+                disabled={submitting}
+              >
+                {({ pressed }) => (
+                  <Text style={[styles.footerLink, pressed && styles.linkPressed]}>Sign up</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -156,132 +241,59 @@ export default function LoginScreen() {
   );
 }
 
-function createStyles(colors: Colors) {
+// Styles only the sign-in screen uses. Every color comes from the theme palette.
+function createLocalStyles(colors: Colors) {
   return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: colors.background,
+    root: {
+      overflow: "hidden",
     },
-    flex: {
-      flex: 1,
-    },
-    scrollContent: {
-      flexGrow: 1,
-      justifyContent: "center",
-      paddingHorizontal: 20,
-      paddingVertical: 32,
-      width: "100%",
-      maxWidth: 440,
-      alignSelf: "center",
-    },
-    brand: {
-      alignItems: "center",
-      marginBottom: 28,
-    },
-    logo: {
-      width: 64,
-      height: 64,
-      borderRadius: 18,
-      backgroundColor: colors.primary,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 12,
-    },
-    logoText: {
-      color: colors.onPrimary,
-      fontSize: 32,
-      fontWeight: "800",
-    },
-    appName: {
-      color: colors.text,
-      fontSize: 28,
-      fontWeight: "800",
-    },
-    tagline: {
-      color: colors.textMuted,
-      fontSize: 15,
-      marginTop: 4,
-      textAlign: "center",
-    },
-    card: {
-      backgroundColor: colors.card,
-      borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      padding: 20,
-      gap: 16,
-    },
-    title: {
-      color: colors.text,
-      fontSize: 22,
-      fontWeight: "700",
-    },
-    field: {
-      gap: 6,
-    },
-    label: {
-      color: colors.text,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    input: {
-      backgroundColor: colors.inputBackground,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 10,
-      color: colors.text,
-      fontSize: 16,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      minHeight: 48,
-    },
-    passwordRow: {
-      justifyContent: "center",
-    },
-    passwordInput: {
-      paddingRight: 68,
-    },
-    showButton: {
+    topBar: {
       position: "absolute",
-      right: 12,
-      paddingHorizontal: 6,
-      paddingVertical: 4,
+      // `top` is set inline from the safe-area inset so it clears the notch.
+      right: 16,
+      zIndex: 1,
     },
-    showButtonText: {
-      color: colors.primary,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    errorBox: {
-      backgroundColor: colors.errorBackground,
-      borderRadius: 10,
-      padding: 12,
-    },
-    errorText: {
-      color: colors.error,
-      fontSize: 14,
-    },
-    successText: {
-      color: colors.text,
-      fontSize: 14,
-    },
-    button: {
+
+    // Background
+    blob: {
+      position: "absolute",
+      borderRadius: 9999,
       backgroundColor: colors.primary,
-      borderRadius: 10,
-      minHeight: 50,
+      opacity: 0.07,
+      pointerEvents: "none",
+    },
+    blobTop: {
+      width: 360,
+      height: 360,
+      top: -180,
+      right: -120,
+    },
+    blobBottom: {
+      width: 280,
+      height: 280,
+      bottom: -140,
+      left: -120,
+    },
+
+    // Form details
+    errorIcon: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: colors.error,
       alignItems: "center",
       justifyContent: "center",
     },
-    buttonPressed: {
-      backgroundColor: colors.primaryPressed,
+    errorIconText: {
+      color: colors.errorBackground,
+      fontSize: 14,
+      fontWeight: "800",
+      lineHeight: 16,
     },
-    buttonDisabled: {
-      opacity: 0.7,
-    },
-    buttonText: {
-      color: colors.onPrimary,
-      fontSize: 16,
-      fontWeight: "700",
+    buttonBusy: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
   });
 }
