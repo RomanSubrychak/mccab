@@ -29,7 +29,8 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | --- | --- | --- |
 | `PORT` | `3000` | Port the API listens on. Defaults to `3000`. |
 | `DATABASE_URL` | `postgresql://postgres:<password>@localhost:5432/rideshare` | PostgreSQL connection string. The format depends on your OS; see the [main README](../README.md#server-setup). |
-| `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Reserved for authentication, which is not built yet. |
+| `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Required: the server won't start without it. |
+| `ALLOWED_EMAIL_DOMAIN` | `school.edu` | Only emails at this domain can sign up. If empty, any email can sign up and the server logs a warning. |
 
 If you add a variable, also add a placeholder to `.env.example` and tell the team.
 
@@ -56,7 +57,10 @@ server/
 ├── src/
 │   ├── index.ts             # Express app: middleware and routes
 │   ├── lib/
+│   │   ├── password-strength.ts  # password strength check (zxcvbn)
 │   │   └── prisma.ts        # shared Prisma client, import it from here
+│   ├── routes/
+│   │   └── auth.ts          # /auth endpoints (sign up)
 │   └── generated/prisma/    # generated client (git-ignored, do not edit)
 ├── .env.example
 ├── package.json
@@ -68,10 +72,11 @@ server/
 | Method | Path | Response |
 | --- | --- | --- |
 | `GET` | `/health` | `{"status":"ok"}` |
+| `POST` | `/auth/register` | Body `{name, email, password}`. `201` with `{token, user}`, `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
 
 All requests and responses use JSON. CORS is enabled so the mobile app can call the API.
 
-Ride, booking and authentication endpoints are not built yet. When you add a route, add it to this table.
+Login, password reset, ride and booking endpoints are not built yet. When you add a route, add it to this table.
 
 ### Using the database in a route
 
@@ -92,13 +97,13 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name` |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API) |
 
 To change the schema:
 
 1. Tell the team. Only one schema change at a time.
 2. Edit `prisma/schema.prisma`.
-3. Run `npx prisma migrate dev --name <short_description>`.
+3. Run `npx prisma migrate dev --name <short_description>`, then `npx prisma generate` (Prisma 7 doesn't regenerate the client during migrate).
 4. Commit `schema.prisma` **and** the new `prisma/migrations/` folder in the same PR.
 
 ## Rules
@@ -115,7 +120,8 @@ To change the schema:
 | `database "rideshare" does not exist` | Create it (see the main README). |
 | `password authentication failed` | Wrong user or password in `DATABASE_URL`. |
 | `Cannot find module '../generated/prisma/client'` | Run `npx prisma generate`. |
-| Missing tables or columns after pulling | Run `npx prisma migrate deploy`. |
+| Missing tables or columns after pulling | Run `npx prisma migrate deploy`, then `npx prisma generate`. |
+| `Unknown argument` from a Prisma call | The generated client is out of date. Run `npx prisma generate` and restart the server. |
 | `Port 3000 is already in use` | Stop the other server, or set `PORT=3001` in `.env` and update `EXPO_PUBLIC_API_URL` in the mobile app. |
 
 More fixes are in the [main README](../README.md#6-troubleshooting).
