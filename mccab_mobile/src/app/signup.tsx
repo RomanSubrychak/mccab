@@ -156,7 +156,9 @@ export default function SignUpScreen() {
                   <Text style={styles.showButtonText}>{showPassword ? "Hide" : "Show"}</Text>
                 </Pressable>
               </View>
-              <Text style={styles.hint}>At least {MIN_PASSWORD_LENGTH} characters.</Text>
+              <Text style={styles.hint}>
+                At least {MIN_PASSWORD_LENGTH} characters. Longer phrases work best.
+              </Text>
             </View>
 
             <View style={styles.field}>

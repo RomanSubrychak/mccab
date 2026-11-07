@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `CHANGELOG.md` to track project changes.
+- `POST /auth/register` sign-up endpoint on the server: bcrypt password hashing, a 7-day JWT, a zxcvbn password strength check, and an optional `ALLOWED_EMAIL_DOMAIN` restriction. Adds a required `passwordHash` column to `User`, so run `npx prisma migrate deploy` and `npx prisma generate`, and add `ALLOWED_EMAIL_DOMAIN` to `server/.env` after pulling. If your local `User` table has rows, delete them first or the migration fails.
 
 ### Fixed
 
