@@ -14,7 +14,7 @@ Run these inside `server/`:
 npm install                  # installs packages
 npx prisma generate          # creates the Prisma client (npm 11+ skips the postinstall script)
 cp .env.example .env         # Windows PowerShell: Copy-Item .env.example .env
-# edit .env and set DATABASE_URL for your computer
+# edit .env: set DATABASE_URL for your computer and JWT_SECRET (see below)
 npx prisma migrate deploy    # creates the tables
 npm run dev                  # starts the API with auto-reload
 ```
@@ -31,6 +31,24 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | `DATABASE_URL` | `postgresql://postgres:<password>@localhost:5432/rideshare` | PostgreSQL connection string. The format depends on your OS; see the [main README](../README.md#server-setup). |
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Required: the server won't start without it. |
 | `ALLOWED_EMAIL_DOMAIN` | `school.edu` | Only emails at this domain can sign up. If empty, any email can sign up and the server logs a warning. |
+
+### Generating `JWT_SECRET`
+
+Replace the `change-me` placeholder with a long random value. Run this on any OS, from any folder:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Paste the output into `server/.env`:
+
+```
+JWT_SECRET=<the output>
+```
+
+Each teammate generates their own for local development, and a deployed server gets its own separate secret. Never share or commit it. If you change it, tokens that were already issued stop working, so users have to log in again.
+
+### Adding a variable
 
 If you add a variable, also add a placeholder to `.env.example` and tell the team.
 

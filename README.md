@@ -154,6 +154,14 @@ Open `server/.env` and set `DATABASE_URL` for your computer:
 
 Run `whoami` to see your username. If your password has special characters such as `@`, `#` or `/`, they must be URL-encoded (for example `@` becomes `%40`).
 
+Then generate a secret for signing login tokens:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Paste the output into `server/.env` as `JWT_SECRET=<the output>`, replacing `change-me`.
+
 Create the tables and start the server:
 
 ```bash
