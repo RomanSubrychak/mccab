@@ -1,5 +1,5 @@
-import { createContext, createElement, useContext, useState, type ReactNode } from "react";
-import { useColorScheme } from "react-native";
+import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
+import { Platform, useColorScheme } from "react-native";
 
 const palette = {
   light: {
@@ -46,7 +46,12 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 // TODO: persist the preference (e.g. with AsyncStorage) so it survives app restarts.
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const systemScheme = useColorScheme() === "dark" ? "dark" : "light";
+  const colorScheme = useColorScheme();
+  const isHydrated = useIsHydrated();
+  // On web the HTML is rendered on the server, which can't know the browser's
+  // color scheme and renders light. Use light until hydration finishes so the
+  // first client render matches the server HTML, then switch to the real scheme.
+  const systemScheme = isHydrated && colorScheme === "dark" ? "dark" : "light";
   const [preference, setPreference] = useState<ThemePreference>("system");
 
   const scheme: ColorScheme = preference === "system" ? systemScheme : preference;
@@ -59,6 +64,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   return createElement(ThemeContext.Provider, { value }, children);
+}
+
+// Native apps have no server render, so they are hydrated from the first render.
+function useIsHydrated(): boolean {
+  const [isHydrated, setIsHydrated] = useState(Platform.OS !== "web");
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+  return isHydrated;
 }
 
 export function useTheme(): ThemeContextValue {
