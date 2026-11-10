@@ -61,3 +61,40 @@ export function initials(name: string): string {
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }
+
+// "05/31/2028" or "2028-05-31" -> "2028-05-31", or null if it isn't a real date.
+export function parseDate(input: string): string | null {
+  const text = input.trim();
+  let year: number, month: number, day: number;
+  const us = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(text);
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+  if (us) [month, day, year] = [Number(us[1]), Number(us[2]), Number(us[3])];
+  else if (iso) [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  else return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date.toISOString().slice(0, 10);
+}
+
+// "2028-05-31" -> "05/31/2028".
+export function formatDate(date: string | null): string | null {
+  if (!date) return null;
+  const [year, month, day] = date.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+// A date on this device as "YYYY-MM-DD".
+function localDateString(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+// "expired", "soon" (within 30 days) or "ok", for a "YYYY-MM-DD" expiration date.
+export function expiryState(expiresOn: string): "expired" | "soon" | "ok" {
+  const now = new Date();
+  if (expiresOn < localDateString(now)) return "expired";
+  const inThirtyDays = new Date(now);
+  inThirtyDays.setDate(now.getDate() + 30);
+  return expiresOn <= localDateString(inThirtyDays) ? "soon" : "ok";
+}

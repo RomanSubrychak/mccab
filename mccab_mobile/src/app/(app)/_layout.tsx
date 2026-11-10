@@ -69,6 +69,8 @@ function SignedInStack() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="settings/about" options={{ title: "About me" }} />
         <Stack.Screen name="settings/car" options={{ title: "My car" }} />
+        <Stack.Screen name="settings/licence" options={{ title: "Driver's licence" }} />
+        <Stack.Screen name="settings/insurance" options={{ title: "Insurance" }} />
         <Stack.Screen name="settings/route" options={{ title: "My route" }} />
         <Stack.Screen name="settings/preferences" options={{ title: "Ride preferences" }} />
         <Stack.Screen name="settings/safety" options={{ title: "Safety" }} />

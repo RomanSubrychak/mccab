@@ -12,11 +12,20 @@ import { currentUserId, requireAuth } from "../middleware/require-auth";
 export const meRoutes = Router();
 meRoutes.use(requireAuth);
 
-const RIDE_ROLES = ["RIDER", "RIDER_DRIVER"] as const;
+const RIDE_ROLES = ["RIDER", "DRIVER", "RIDER_DRIVER"] as const;
+const RIDE_MODES = ["RIDING", "DRIVING"] as const;
 const CAMPUSES = ["CHICAGO_MAIN", "CHICAGO_DOWNTOWN", "NAPERVILLE", "EVERGREEN_PARK"] as const;
 const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
 const CHAT_PREFERENCES = ["QUIET", "SOME", "CHATTY"] as const;
 const PHONE_VISIBILITIES = ["CONFIRMED_RIDES", "NOBODY"] as const;
+
+// prettier-ignore
+const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+  "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM",
+  "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+  "WV", "WI", "WY",
+] as const;
 
 const MAX_PRICE_PER_SEAT_CENTS = 2500; // $25
 const MAX_SEATS = 3;
@@ -32,6 +41,7 @@ const PROFILE_SELECT = {
   major: true,
   graduationYear: true,
   rideRole: true,
+  activeMode: true,
   termsAcceptedAt: true,
   campus: true,
   homeArea: true,
@@ -48,6 +58,12 @@ const PROFILE_SELECT = {
   notifyRideUpdates: true,
   notifyMessages: true,
   notifyNews: true,
+  licenceState: true,
+  licenceLast4: true,
+  licenceExpiresOn: true,
+  insuranceProvider: true,
+  insurancePolicyLast4: true,
+  insuranceExpiresOn: true,
   vehicle: {
     select: { make: true, model: true, year: true, color: true, plate: true, seats: true },
   },
@@ -159,6 +175,8 @@ const PROFILE_FIELDS: Record<string, (value: unknown) => unknown> = {
       `Enter a year between ${thisYear - 1} and ${thisYear + 8}.`,
     ),
   rideRole: (v) => oneOf("rideRole", v, RIDE_ROLES),
+  // Checked again against the role, licence and car in PATCH /me.
+  activeMode: (v) => oneOf("activeMode", v, RIDE_MODES),
   campus: (v) => optionalOneOf("campus", v, CAMPUSES),
   homeArea: (v) => optionalText("homeArea", v, 80),
   rideDays: (v) => weekdays("rideDays", v),
@@ -191,18 +209,109 @@ function sendFieldError(res: Response, err: unknown): boolean {
   return false;
 }
 
-async function loadProfile(userId: number) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: PROFILE_SELECT });
-  return user && withStats(user);
+// ---- Dates for the licence and insurance ----
+
+// Today's date in Chicago as "YYYY-MM-DD", so "expired" matches what students see.
+function todayInChicago(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago" }).format(new Date());
 }
 
-// Ratings and ride counts come from rides, which don't exist yet.
-function withStats<T>(user: T) {
+// Database DATE columns come back as midnight UTC.
+function toDateString(date: Date | null): string | null {
+  return date ? date.toISOString().slice(0, 10) : null;
+}
+
+// "YYYY-MM-DD" that isn't in the past and is at most maxYears ahead.
+function futureDate(field: string, value: unknown, what: string, maxYears: number): Date {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new FieldError(field, "Enter the expiration date, like 05/31/2028.");
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  // Rejects dates like 2028-02-31, which Date would roll over to March.
+  if (Number.isNaN(date.getTime()) || toDateString(date) !== value) {
+    throw new FieldError(field, "Enter a real date, like 05/31/2028.");
+  }
+  if (value < todayInChicago()) {
+    throw new FieldError(field, `This ${what} has expired. Enter the date on your current one.`);
+  }
+  if (date.getUTCFullYear() > new Date().getUTCFullYear() + maxYears) {
+    throw new FieldError(field, "Check the expiration date.");
+  }
+  return date;
+}
+
+// The last 4 letters or digits of a licence or policy number.
+function last4(field: string, value: unknown): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9]{4}$/.test(value.trim())) {
+    throw new FieldError(field, "Enter the last 4 letters or digits.");
+  }
+  return value.trim().toUpperCase();
+}
+
+type ProfileRow = Prisma.UserGetPayload<{ select: typeof PROFILE_SELECT }>;
+
+// What's missing before a student can drive. Insurance is recommended but not required.
+function driverStatus(user: Pick<ProfileRow, "licenceLast4" | "licenceExpiresOn" | "vehicle">) {
+  const missing: ("licence" | "licenceExpired" | "car")[] = [];
+  const licenceExpiresOn = toDateString(user.licenceExpiresOn);
+  if (!user.licenceLast4 || !licenceExpiresOn) missing.push("licence");
+  else if (licenceExpiresOn < todayInChicago()) missing.push("licenceExpired");
+  if (!user.vehicle) missing.push("car");
+  return { ready: missing.length === 0, missing };
+}
+
+// The shape the app receives: licence and insurance grouped, the mode the
+// student is actually in, and stats.
+function toProfile(user: ProfileRow) {
+  const {
+    licenceState,
+    licenceLast4,
+    licenceExpiresOn,
+    insuranceProvider,
+    insurancePolicyLast4,
+    insuranceExpiresOn,
+    activeMode,
+    ...rest
+  } = user;
+  const status = driverStatus(user);
+  // RIDER always rides and DRIVER always drives. A RIDER_DRIVER who lost their
+  // licence or car since switching is shown as riding.
+  const mode =
+    user.rideRole === "DRIVER"
+      ? "DRIVING"
+      : user.rideRole === "RIDER_DRIVER" && activeMode === "DRIVING" && status.ready
+        ? "DRIVING"
+        : "RIDING";
   return {
-    ...user,
+    ...rest,
+    activeMode: mode,
+    licence:
+      licenceLast4 && licenceState
+        ? { state: licenceState, last4: licenceLast4, expiresOn: toDateString(licenceExpiresOn) }
+        : null,
+    insurance: insuranceProvider
+      ? {
+          provider: insuranceProvider,
+          policyLast4: insurancePolicyLast4,
+          expiresOn: toDateString(insuranceExpiresOn),
+        }
+      : null,
+    driverStatus: status,
+    // Ratings and ride counts come from rides, which don't exist yet.
     stats: { ratingAverage: null, ratingCount: 0, ridesGiven: 0, ridesTaken: 0 },
   };
 }
+
+async function loadProfile(userId: number) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: PROFILE_SELECT });
+  return user && toProfile(user);
+}
+
+const DRIVER_SETUP_MESSAGES: Record<string, string> = {
+  licence: "Add your driver's licence to start driving.",
+  licenceExpired: "Your driver's licence has expired. Update it to start driving.",
+  car: "Add your car to start driving.",
+};
 
 // GET /me -> 200 { profile }
 meRoutes.get("/", async (req: Request, res: Response) => {
@@ -234,12 +343,39 @@ meRoutes.patch("/", async (req: Request, res: Response) => {
     throw err;
   }
 
+  const userId = currentUserId(res);
+
+  // Switching to driving needs the right role, a valid licence and a car.
+  if (data.activeMode === "DRIVING") {
+    const current = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: PROFILE_SELECT,
+    });
+    const role = (data.rideRole as string | undefined) ?? current.rideRole;
+    if (role !== "RIDER_DRIVER" && role !== "DRIVER") {
+      res.status(400).json({ error: "Choose Driver or Rider & Driver first.", field: "activeMode" });
+      return;
+    }
+    const status = driverStatus(current);
+    if (!status.ready) {
+      res.status(400).json({
+        error: DRIVER_SETUP_MESSAGES[status.missing[0]],
+        field: "activeMode",
+        missing: status.missing,
+      });
+      return;
+    }
+  } else if (data.rideRole !== undefined && data.activeMode === undefined) {
+    // A new role starts in riding mode; a RIDER_DRIVER switches to driving on Home.
+    data.activeMode = "RIDING";
+  }
+
   const user = await prisma.user.update({
-    where: { id: currentUserId(res) },
+    where: { id: userId },
     data: data as Prisma.UserUpdateInput,
     select: PROFILE_SELECT,
   });
-  res.json({ profile: withStats(user) });
+  res.json({ profile: toProfile(user) });
 });
 
 // POST /me/terms -> 200 { profile }
@@ -290,7 +426,78 @@ meRoutes.put("/vehicle", async (req: Request, res: Response) => {
 // DELETE /me/vehicle -> 200 { profile }
 meRoutes.delete("/vehicle", async (req: Request, res: Response) => {
   const userId = currentUserId(res);
-  await prisma.vehicle.deleteMany({ where: { userId } });
+  await prisma.$transaction([
+    prisma.vehicle.deleteMany({ where: { userId } }),
+    // Can't drive without a car.
+    prisma.user.update({ where: { id: userId }, data: { activeMode: "RIDING" } }),
+  ]);
+  res.json({ profile: await loadProfile(userId) });
+});
+
+// PUT /me/licence  { state, last4, expiresOn: "YYYY-MM-DD" } -> 200 { profile }
+// Only the last 4 characters of the licence number are sent and stored.
+meRoutes.put("/licence", async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  let data;
+  try {
+    const state = typeof body.state === "string" ? body.state.trim().toUpperCase() : "";
+    if (!(US_STATES as readonly string[]).includes(state)) {
+      throw new FieldError("state", "Choose the state that issued your licence.");
+    }
+    data = {
+      licenceState: state,
+      licenceLast4: last4("last4", body.last4),
+      licenceExpiresOn: futureDate("expiresOn", body.expiresOn, "licence", 15),
+    };
+  } catch (err) {
+    if (sendFieldError(res, err)) return;
+    throw err;
+  }
+  const userId = currentUserId(res);
+  await prisma.user.update({ where: { id: userId }, data });
+  res.json({ profile: await loadProfile(userId) });
+});
+
+// DELETE /me/licence -> 200 { profile }
+meRoutes.delete("/licence", async (req: Request, res: Response) => {
+  const userId = currentUserId(res);
+  await prisma.user.update({
+    where: { id: userId },
+    // Can't drive without a licence.
+    data: { licenceState: null, licenceLast4: null, licenceExpiresOn: null, activeMode: "RIDING" },
+  });
+  res.json({ profile: await loadProfile(userId) });
+});
+
+// PUT /me/insurance  { provider, policyLast4?, expiresOn: "YYYY-MM-DD" } -> 200 { profile }
+meRoutes.put("/insurance", async (req: Request, res: Response) => {
+  const body = req.body ?? {};
+  let data;
+  try {
+    data = {
+      insuranceProvider: requiredText("provider", body.provider, "insurance company", 60),
+      insurancePolicyLast4:
+        body.policyLast4 === undefined || body.policyLast4 === null || body.policyLast4 === ""
+          ? null
+          : last4("policyLast4", body.policyLast4),
+      insuranceExpiresOn: futureDate("expiresOn", body.expiresOn, "policy", 2),
+    };
+  } catch (err) {
+    if (sendFieldError(res, err)) return;
+    throw err;
+  }
+  const userId = currentUserId(res);
+  await prisma.user.update({ where: { id: userId }, data });
+  res.json({ profile: await loadProfile(userId) });
+});
+
+// DELETE /me/insurance -> 200 { profile }
+meRoutes.delete("/insurance", async (req: Request, res: Response) => {
+  const userId = currentUserId(res);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { insuranceProvider: null, insurancePolicyLast4: null, insuranceExpiresOn: null },
+  });
   res.json({ profile: await loadProfile(userId) });
 });
 

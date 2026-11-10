@@ -1,13 +1,14 @@
 // Choices on the profile page. The values match the enums in
 // server/prisma/schema.prisma; keep both in sync.
 
-export type RideRole = "RIDER" | "RIDER_DRIVER";
+export type RideRole = "RIDER" | "DRIVER" | "RIDER_DRIVER";
+export type RideMode = "RIDING" | "DRIVING";
 export type Campus = "CHICAGO_MAIN" | "CHICAGO_DOWNTOWN" | "NAPERVILLE" | "EVERGREEN_PARK";
 export type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 export type ChatPreference = "QUIET" | "SOME" | "CHATTY";
 export type PhoneVisibility = "CONFIRMED_RIDES" | "NOBODY";
 
-// Every student can ride. "Rider & Driver" can also offer rides in their own car.
+// Students can switch between these any time from the Profile tab.
 export const RIDE_ROLES: { value: RideRole; label: string; emoji: string; description: string }[] = [
   {
     value: "RIDER",
@@ -16,10 +17,16 @@ export const RIDE_ROLES: { value: RideRole; label: string; emoji: string; descri
     description: "Find a seat with a classmate who's already driving to campus.",
   },
   {
+    value: "DRIVER",
+    label: "Driver",
+    emoji: "🚗",
+    description: "Offer rides in your own car to 2 or 3 students going your way.",
+  },
+  {
     value: "RIDER_DRIVER",
     label: "Rider & Driver",
-    emoji: "🚗",
-    description: "Book seats when you need one, and offer rides in your own car to 2 or 3 students.",
+    emoji: "🔁",
+    description: "Book seats when you need one, and offer rides on the days you drive.",
   },
 ];
 
@@ -27,9 +34,34 @@ export function rideRoleLabel(role: RideRole | null): string | null {
   return RIDE_ROLES.find((option) => option.value === role)?.label ?? null;
 }
 
+// Drivers need a licence and a car (and should add insurance).
 export function isDriver(role: RideRole | null): boolean {
-  return role === "RIDER_DRIVER";
+  return role === "DRIVER" || role === "RIDER_DRIVER";
 }
+
+// Only a Rider & Driver switches between riding and driving.
+export const RIDE_MODES: { value: RideMode; label: string }[] = [
+  { value: "RIDING", label: "Riding" },
+  { value: "DRIVING", label: "Driving" },
+];
+
+// What's missing before a student can drive (from the server's driverStatus).
+export type DriverSetupItem = "licence" | "licenceExpired" | "car";
+
+export const DRIVER_SETUP_ITEMS: Record<DriverSetupItem, { label: string; href: "/settings/licence" | "/settings/car" }> = {
+  licence: { label: "Add your driver's licence", href: "/settings/licence" },
+  licenceExpired: { label: "Your licence has expired: update it", href: "/settings/licence" },
+  car: { label: "Add your car", href: "/settings/car" },
+};
+
+// Two-letter codes of the states that issue driver's licences, plus DC.
+// prettier-ignore
+export const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+  "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM",
+  "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+  "WV", "WI", "WY",
+];
 
 // MCC campuses in the Chicago area (https://www.mccollege.edu/locations).
 export const CAMPUSES: { value: Campus; label: string; address: string }[] = [

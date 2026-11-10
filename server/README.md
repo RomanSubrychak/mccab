@@ -107,11 +107,15 @@ These need the login token in an `Authorization: Bearer <token>` header. A missi
 
 | Method | Path | Response |
 | --- | --- | --- |
-| `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, plus `vehicle` (or `null`) and `stats` (ratings and ride counts, all zero until rides exist). |
-| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
+| `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, with `licence` and `insurance` grouped (or `null`), plus `vehicle` (or `null`), `driverStatus` (`{ready, missing}`: drivers need a licence that hasn't expired and a car) and `stats` (ratings and ride counts, all zero until rides exist). `activeMode` is the mode the student is really in: always `RIDING` for a rider, `DRIVING` for a driver. |
+| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. `activeMode: "DRIVING"` is refused with `400` (`field: "activeMode"`, plus `missing`) unless the role is `DRIVER` or `RIDER_DRIVER` and `driverStatus.ready` is true. Changing `rideRole` switches back to riding. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
 | `POST` | `/me/terms` | Records that the student agreed to the Terms and Conditions (keeps the first date). `200` with `{profile}`. |
 | `PUT` | `/me/vehicle` | Body `{make, model, year?, color, plate, seats}` (1 to 3 seats). Creates or replaces the user's car. `200` with `{profile}`. |
-| `DELETE` | `/me/vehicle` | Removes the car. `200` with `{profile}`. |
+| `DELETE` | `/me/vehicle` | Removes the car and switches back to riding. `200` with `{profile}`. |
+| `PUT` | `/me/licence` | Body `{state, last4, expiresOn}` (`"YYYY-MM-DD"`, not expired). Only the last 4 characters of the number are sent and stored. `200` with `{profile}`. |
+| `DELETE` | `/me/licence` | Removes the licence and switches back to riding. `200` with `{profile}`. |
+| `PUT` | `/me/insurance` | Body `{provider, policyLast4?, expiresOn}` (not expired). `200` with `{profile}`. |
+| `DELETE` | `/me/insurance` | Removes the insurance details. `200` with `{profile}`. |
 | `POST` | `/me/password` | Body `{currentPassword, newPassword}`. `200` with `{token}`. Signs out every other device; use the new token on this one. |
 | `DELETE` | `/me` | Body `{password}`. `204`. Deletes the account, its car and its reset codes. |
 
@@ -138,7 +142,7 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`RIDER_DRIVER`, `null` until the student picks one), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews` |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`RIDER_DRIVER`, `null` until the student picks one), `activeMode` (`RIDING`/`DRIVING`, what a `RIDER_DRIVER` is doing now), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `licenceState`, `licenceLast4`, `licenceExpiresOn`, `insuranceProvider`, `insurancePolicyLast4`, `insuranceExpiresOn` (only the last 4 characters of licence and policy numbers are stored), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews` |
 | `Vehicle` | `id`, `userId` (unique: one car per user), `make`, `model`, `year`, `color`, `plate`, `seats` (1 to 3), `createdAt`, `updatedAt`. Deleted when the user is deleted. |
 | `PasswordReset` | `id`, `userId`, `tokenHash` (unique SHA-256 of the reset code), `expiresAt`, `usedAt`, `createdAt`. Deleted when the user is deleted. |
 

@@ -1,7 +1,14 @@
 import { createContext, use, useCallback, useEffect, useState, type ReactNode } from "react";
 
 import * as api from "@/lib/api";
-import { ApiError, type Profile, type ProfileChanges, type VehicleInput } from "@/lib/api";
+import {
+  ApiError,
+  type Insurance,
+  type Licence,
+  type Profile,
+  type ProfileChanges,
+  type VehicleInput,
+} from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 type ProfileContextValue = {
@@ -15,6 +22,10 @@ type ProfileContextValue = {
   acceptTerms: () => Promise<void>;
   saveVehicle: (vehicle: VehicleInput) => Promise<void>;
   removeVehicle: () => Promise<void>;
+  saveLicence: (licence: Licence) => Promise<void>;
+  removeLicence: () => Promise<void>;
+  saveInsurance: (insurance: Insurance) => Promise<void>;
+  removeInsurance: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
 };
@@ -75,6 +86,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     },
     removeVehicle: async () => {
       setProfile(await withToken(api.removeVehicle));
+    },
+    saveLicence: async (licence) => {
+      setProfile(await withToken((t) => api.saveLicence(t, licence)));
+    },
+    removeLicence: async () => {
+      setProfile(await withToken(api.removeLicence));
+    },
+    saveInsurance: async (insurance) => {
+      setProfile(await withToken((t) => api.saveInsurance(t, insurance)));
+    },
+    removeInsurance: async () => {
+      setProfile(await withToken(api.removeInsurance));
     },
     changePassword: async (currentPassword, newPassword) => {
       // The old token stops working, so keep this device signed in with the new one.

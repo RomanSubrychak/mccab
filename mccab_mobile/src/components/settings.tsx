@@ -15,10 +15,13 @@ const WEB_SWITCH_PROPS = Platform.OS === "web" ? ({ activeThumbColor: "#FFFFFF" 
 export function SettingsGroup({
   title,
   footer,
+  error,
   children,
 }: {
   title?: string;
   footer?: string;
+  // Shown instead of the footer, in the error colour.
+  error?: string | null;
   children: ReactNode;
 }) {
   const styles = createStyles(useThemeColors());
@@ -38,7 +41,13 @@ export function SettingsGroup({
           </Fragment>
         ))}
       </View>
-      {footer ? <Text style={styles.groupFooter}>{footer}</Text> : null}
+      {error ? (
+        <Text style={[styles.groupFooter, styles.errorText]} accessibilityRole="alert">
+          {error}
+        </Text>
+      ) : footer ? (
+        <Text style={styles.groupFooter}>{footer}</Text>
+      ) : null}
     </View>
   );
 }
@@ -51,6 +60,7 @@ export function SettingsRow({
   onPress,
   destructive = false,
   showChevron = true,
+  warning = false,
 }: {
   icon?: IconName;
   label: string;
@@ -58,6 +68,8 @@ export function SettingsRow({
   onPress: () => void;
   destructive?: boolean;
   showChevron?: boolean;
+  // Shows the value in the error colour with an alert icon (missing or expired).
+  warning?: boolean;
 }) {
   const colors = useThemeColors();
   const styles = createStyles(colors);
@@ -73,11 +85,12 @@ export function SettingsRow({
       <View style={styles.rowText}>
         <Text style={[styles.rowLabel, { color: tint }]}>{label}</Text>
         {value ? (
-          <Text style={styles.rowValue} numberOfLines={2}>
+          <Text style={[styles.rowValue, warning && { color: colors.error }]} numberOfLines={2}>
             {value}
           </Text>
         ) : null}
       </View>
+      {warning ? <Ionicons name="alert-circle" size={18} color={colors.error} /> : null}
       {showChevron ? <Ionicons name="chevron-forward" size={18} color={colors.textMuted} /> : null}
     </Pressable>
   );

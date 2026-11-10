@@ -1,14 +1,12 @@
 import { useState } from "react";
 
 import { FormScreen, WithProfile, useSaveHandler } from "@/components/form-screen";
-import { ChoiceChips } from "@/components/settings";
 import { TextField } from "@/components/text-field";
-import { RIDE_ROLES, type RideRole } from "@/constants/profile-options";
 import type { Profile } from "@/lib/api";
 import { formatPhone } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 
-const FIELDS = ["name", "phone", "major", "graduationYear", "bio", "rideRole"] as const;
+const FIELDS = ["name", "phone", "major", "graduationYear", "bio"] as const;
 const MAX_BIO_LENGTH = 300;
 
 export default function AboutScreen() {
@@ -26,8 +24,6 @@ function AboutForm({ profile }: { profile: Profile }) {
     profile.graduationYear ? String(profile.graduationYear) : "",
   );
   const [bio, setBio] = useState(profile.bio ?? "");
-  // Students reach this screen after choosing a role, so null is only a fallback.
-  const [rideRole, setRideRole] = useState<RideRole>(profile.rideRole ?? "RIDER");
 
   function handleSave() {
     const year = graduationYear.trim();
@@ -44,25 +40,17 @@ function AboutForm({ profile }: { profile: Profile }) {
         major: major.trim(),
         graduationYear: year ? Number(year) : null,
         bio: bio.trim(),
-        rideRole,
       }),
     );
   }
 
   return (
     <FormScreen
-      intro="Riders and drivers see your name and how you use MCCab. Your phone number is private (see Safety)."
+      intro="Riders and drivers see your name and program. Your phone number is private (see Safety). Change whether you ride or drive at the top of your profile."
       saving={saving}
       formError={formError}
       onSave={handleSave}
     >
-      <ChoiceChips
-        label="I use MCCab as a"
-        options={RIDE_ROLES.map((role) => ({ value: role.value, label: role.label }))}
-        value={rideRole}
-        onChange={setRideRole}
-        error={fieldErrors.rideRole}
-      />
       <TextField
         label="Full name"
         value={name}

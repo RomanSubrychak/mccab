@@ -1,7 +1,9 @@
 import type {
   Campus,
   ChatPreference,
+  DriverSetupItem,
   PhoneVisibility,
+  RideMode,
   RideRole,
   Weekday,
 } from "@/constants/profile-options";
@@ -17,6 +19,19 @@ export type AuthUser = {
 export type LoginResponse = {
   token: string;
   user: AuthUser;
+};
+
+// Only the last 4 characters of the licence number are ever stored or shown.
+export type Licence = {
+  state: string;
+  last4: string;
+  expiresOn: string; // "YYYY-MM-DD"
+};
+
+export type Insurance = {
+  provider: string;
+  policyLast4: string | null;
+  expiresOn: string; // "YYYY-MM-DD"
 };
 
 export type Vehicle = {
@@ -37,6 +52,8 @@ export type Profile = AuthUser & {
   graduationYear: number | null;
   // null until the student picks one after accepting the terms.
   rideRole: RideRole | null;
+  // RIDER always rides and DRIVER always drives; a RIDER_DRIVER switches on Home.
+  activeMode: RideMode;
   // When the student agreed to the Terms and Conditions, or null.
   termsAcceptedAt: string | null;
   campus: Campus | null;
@@ -55,6 +72,10 @@ export type Profile = AuthUser & {
   notifyMessages: boolean;
   notifyNews: boolean;
   vehicle: Vehicle | null;
+  licence: Licence | null;
+  insurance: Insurance | null;
+  // Whether the student can switch to driving, and what's missing if not.
+  driverStatus: { ready: boolean; missing: DriverSetupItem[] };
   stats: {
     ratingAverage: number | null;
     ratingCount: number;
@@ -65,7 +86,19 @@ export type Profile = AuthUser & {
 
 // The profile fields PATCH /me accepts. Send only the ones that change.
 export type ProfileChanges = Partial<
-  Omit<Profile, "id" | "email" | "createdAt" | "termsAcceptedAt" | "vehicle" | "stats" | "rideRole">
+  Omit<
+    Profile,
+    | "id"
+    | "email"
+    | "createdAt"
+    | "termsAcceptedAt"
+    | "vehicle"
+    | "licence"
+    | "insurance"
+    | "driverStatus"
+    | "stats"
+    | "rideRole"
+  >
 > & {
   // A role can be chosen or changed, but not cleared.
   rideRole?: RideRole;
@@ -194,6 +227,44 @@ export async function acceptTerms(token: string): Promise<Profile> {
     method: "POST",
     token,
     feature: "Terms",
+  });
+  return data.profile;
+}
+
+export async function saveLicence(token: string, licence: Licence): Promise<Profile> {
+  const data = await request<{ profile: Profile }>("/me/licence", {
+    method: "PUT",
+    body: licence,
+    token,
+    feature: "Driver's licence",
+  });
+  return data.profile;
+}
+
+export async function removeLicence(token: string): Promise<Profile> {
+  const data = await request<{ profile: Profile }>("/me/licence", {
+    method: "DELETE",
+    token,
+    feature: "Driver's licence",
+  });
+  return data.profile;
+}
+
+export async function saveInsurance(token: string, insurance: Insurance): Promise<Profile> {
+  const data = await request<{ profile: Profile }>("/me/insurance", {
+    method: "PUT",
+    body: insurance,
+    token,
+    feature: "Insurance",
+  });
+  return data.profile;
+}
+
+export async function removeInsurance(token: string): Promise<Profile> {
+  const data = await request<{ profile: Profile }>("/me/insurance", {
+    method: "DELETE",
+    token,
+    feature: "Insurance",
   });
   return data.profile;
 }
