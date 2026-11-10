@@ -23,3 +23,23 @@ export function getPasswordProblem(password: string, userInputs: string[]): stri
   const details = [feedback.warning, feedback.suggestions[0]].filter(Boolean).join(" ");
   return `This password is too easy to guess. ${details || "Try a longer one."}`;
 }
+
+export const MIN_PASSWORD_LENGTH = 8;
+// bcrypt ignores everything after 72 bytes, so longer passwords are rejected.
+export const MAX_PASSWORD_BYTES = 72;
+
+// Checks a password someone is choosing (sign-up, reset, change). Returns a
+// message describing the first problem, or null when it's fine.
+// Length checks run before zxcvbn so very long input never reaches it.
+export function validateNewPassword(password: unknown, userInputs: string[]): string | null {
+  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
+    return `Password must be at most ${MAX_PASSWORD_BYTES} characters.`;
+  }
+  return getPasswordProblem(password, userInputs);
+}
+
+// Cost factor for bcrypt password hashes.
+export const BCRYPT_ROUNDS = 10;

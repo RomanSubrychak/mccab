@@ -1,0 +1,117 @@
+// Choices on the profile page. The values match the enums in
+// server/prisma/schema.prisma; keep both in sync.
+
+export type RideRole = "RIDER" | "DRIVER" | "RIDER_DRIVER";
+export type RideMode = "RIDING" | "DRIVING";
+export type Campus = "CHICAGO_MAIN" | "CHICAGO_DOWNTOWN" | "NAPERVILLE" | "EVERGREEN_PARK";
+export type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
+export type ChatPreference = "QUIET" | "SOME" | "CHATTY";
+export type PhoneVisibility = "CONFIRMED_RIDES" | "NOBODY";
+
+// Students can switch between these any time from the Profile tab.
+export const RIDE_ROLES: { value: RideRole; label: string; emoji: string; description: string }[] = [
+  {
+    value: "RIDER",
+    label: "Rider",
+    emoji: "🎒",
+    description: "Find a seat with a classmate who's already driving to campus.",
+  },
+  {
+    value: "DRIVER",
+    label: "Driver",
+    emoji: "🚗",
+    description: "Offer rides in your own car to 2 or 3 students going your way.",
+  },
+  {
+    value: "RIDER_DRIVER",
+    label: "Rider & Driver",
+    emoji: "🔁",
+    description: "Book seats when you need one, and offer rides on the days you drive.",
+  },
+];
+
+export function rideRoleLabel(role: RideRole | null): string | null {
+  return RIDE_ROLES.find((option) => option.value === role)?.label ?? null;
+}
+
+// Drivers need a licence and a car (and should add insurance).
+export function isDriver(role: RideRole | null): boolean {
+  return role === "DRIVER" || role === "RIDER_DRIVER";
+}
+
+// Only a Rider & Driver switches between riding and driving.
+export const RIDE_MODES: { value: RideMode; label: string }[] = [
+  { value: "RIDING", label: "Riding" },
+  { value: "DRIVING", label: "Driving" },
+];
+
+// What's missing before a student can drive (from the server's driverStatus).
+export type DriverSetupItem = "licence" | "licenceExpired" | "car";
+
+export const DRIVER_SETUP_ITEMS: Record<DriverSetupItem, { label: string; href: "/settings/licence" | "/settings/car" }> = {
+  licence: { label: "Add your driver's licence", href: "/settings/licence" },
+  licenceExpired: { label: "Your licence has expired: update it", href: "/settings/licence" },
+  car: { label: "Add your car", href: "/settings/car" },
+};
+
+// Two-letter codes of the states that issue driver's licences, plus DC.
+// prettier-ignore
+export const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+  "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM",
+  "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA",
+  "WV", "WI", "WY",
+];
+
+// MCC campuses in the Chicago area (https://www.mccollege.edu/locations).
+export const CAMPUSES: { value: Campus; label: string; address: string }[] = [
+  {
+    value: "CHICAGO_MAIN",
+    label: "Chicago Main",
+    address: "203 N LaSalle St #1400, Chicago, IL 60601",
+  },
+  {
+    value: "CHICAGO_DOWNTOWN",
+    label: "Chicago Downtown",
+    address: "100 S Wacker Dr LL1-50, Chicago, IL 60606",
+  },
+  {
+    value: "NAPERVILLE",
+    label: "Naperville",
+    address: "200 E 5th Ave #128, Naperville, IL 60563",
+  },
+  {
+    value: "EVERGREEN_PARK",
+    label: "Evergreen Park",
+    address: "9730 S Western Ave, Evergreen Park, IL 60805",
+  },
+];
+
+export function campusLabel(campus: Campus | null): string | null {
+  return CAMPUSES.find((option) => option.value === campus)?.label ?? null;
+}
+
+export const WEEKDAYS: { value: Weekday; label: string }[] = [
+  { value: "MON", label: "Mon" },
+  { value: "TUE", label: "Tue" },
+  { value: "WED", label: "Wed" },
+  { value: "THU", label: "Thu" },
+  { value: "FRI", label: "Fri" },
+  { value: "SAT", label: "Sat" },
+  { value: "SUN", label: "Sun" },
+];
+
+export const CHAT_PREFERENCES: { value: ChatPreference; label: string }[] = [
+  { value: "QUIET", label: "Quiet ride" },
+  { value: "SOME", label: "A little chat" },
+  { value: "CHATTY", label: "Chatty" },
+];
+
+export const PHONE_VISIBILITIES: { value: PhoneVisibility; label: string }[] = [
+  { value: "CONFIRMED_RIDES", label: "People in my confirmed rides" },
+  { value: "NOBODY", label: "Nobody" },
+];
+
+// Same limits as the server (server/src/routes/me.ts).
+export const MAX_SEATS = 3;
+export const MAX_PRICE_PER_SEAT_DOLLARS = 25;

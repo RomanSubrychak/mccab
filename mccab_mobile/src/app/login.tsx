@@ -72,8 +72,9 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       const result = await login(trimmedEmail, password);
-      // Leaving the signed-out screens sends the user on to the terms (see _layout.tsx).
-      signIn(result.token, result.user);
+      // Saving the token switches to the signed-in screens: the terms, the role
+      // choice or the tabs, depending on how far the student got (see (app)/_layout.tsx).
+      signIn(result.token);
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -129,6 +130,7 @@ export default function LoginScreen() {
                 <Text style={styles.errorText}>{formError}</Text>
               </View>
             ) : null}
+
 
             <View style={styles.form}>
               <TextField

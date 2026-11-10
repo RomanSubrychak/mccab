@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useThemeColors, type Colors } from "@/constants/theme";
+import { ApiError } from "@/lib/api";
+import { useProfile } from "@/lib/profile";
 import { useSession } from "@/lib/session";
 import { createAuthStyles } from "@/styles/auth";
 
@@ -47,9 +49,25 @@ export default function TermsScreen() {
   const colors = useThemeColors();
   const styles = createAuthStyles(colors);
   const local = createLocalStyles(colors);
-  const { acceptTerms, signOut } = useSession();
+  const { acceptTerms } = useProfile();
+  const { signOut } = useSession();
 
   const [agreed, setAgreed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Saved on the server. Once accepted, the app moves on to the role choice (see (app)/_layout.tsx).
+  async function handleAccept() {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await acceptTerms();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+      setSaving(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -98,13 +116,23 @@ export default function TermsScreen() {
               pressed && agreed && styles.buttonPressed,
               !agreed && local.buttonInactive,
             ]}
-            onPress={acceptTerms}
-            disabled={!agreed}
+            onPress={handleAccept}
+            disabled={!agreed || saving}
             accessibilityRole="button"
-            accessibilityState={{ disabled: !agreed }}
+            accessibilityState={{ disabled: !agreed || saving, busy: saving }}
           >
-            <Text style={styles.buttonText}>Agree and continue</Text>
+            {saving ? (
+              <ActivityIndicator color={colors.onPrimary} />
+            ) : (
+              <Text style={styles.buttonText}>Agree and continue</Text>
+            )}
           </Pressable>
+
+          {error ? (
+            <Text style={local.errorText} accessibilityRole="alert">
+              {error}
+            </Text>
+          ) : null}
 
           <Pressable
             style={local.declineButton}
@@ -206,6 +234,12 @@ function createLocalStyles(colors: Colors) {
     buttonInactive: {
       opacity: 0.45,
       boxShadow: "none",
+    },
+    errorText: {
+      color: colors.error,
+      fontSize: 14,
+      fontWeight: "500",
+      textAlign: "center",
     },
     declineButton: {
       alignItems: "center",

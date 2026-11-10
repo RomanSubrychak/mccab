@@ -69,8 +69,9 @@ export default function SignUpScreen() {
     } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
       errors.email = `Enter a valid email address, like ${SCHOOL_EMAIL_EXAMPLE}.`;
     } else if (!isSchoolEmail(trimmedEmail)) {
-      // Same message as the server, which checks this too.
-      errors.email = `Use your school email address (@${SCHOOL_EMAIL_DOMAIN}).`;
+      // Same message as the server, which checks this too. It doesn't name the
+      // allowed domain on purpose.
+      errors.email = "Use your school email address.";
     }
     if (password.length < MIN_PASSWORD_LENGTH) {
       errors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;

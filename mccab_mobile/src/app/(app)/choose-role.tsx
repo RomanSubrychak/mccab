@@ -1,35 +1,47 @@
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useThemeColors, type Colors } from "@/constants/theme";
-import { useSession, type UserRole } from "@/lib/session";
+import { RIDE_ROLES, type RideRole } from "@/constants/profile-options";
+import { ApiError } from "@/lib/api";
+import { firstName as getFirstName } from "@/lib/format";
+import { useProfile } from "@/lib/profile";
 import { createAuthStyles } from "@/styles/auth";
 
-const ROLE_OPTIONS: { role: UserRole; emoji: string; title: string; description: string }[] = [
-  {
-    role: "rider",
-    emoji: "🎒",
-    title: "Rider",
-    description: "Find a seat with a classmate who's already driving to campus.",
-  },
-  {
-    role: "rider_driver",
-    emoji: "🚗",
-    title: "Rider & Driver",
-    description: "Book seats when you need one, and offer rides in your own car to 2 or 3 students.",
-  },
-];
+// The same two roles as everywhere else in the app (constants/profile-options.ts).
+const ROLE_OPTIONS = RIDE_ROLES.map((option) => ({
+  role: option.value,
+  emoji: option.emoji,
+  title: option.label,
+  description: option.description,
+}));
 
 // Splash page shown once after sign-in: the student picks how they will use MCCab.
 export default function ChooseRoleScreen() {
   const colors = useThemeColors();
   const styles = createAuthStyles(colors);
   const local = createLocalStyles(colors);
-  const { session, chooseRole } = useSession();
+  const { profile, update } = useProfile();
 
-  const [selected, setSelected] = useState<UserRole | null>(null);
-  const firstName = session?.user.name.split(" ")[0] ?? "";
+  const [selected, setSelected] = useState<RideRole | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const firstName = profile ? getFirstName(profile.name) : "";
+
+  // Saved on the server. Once chosen, the app moves on to the tabs (see (app)/_layout.tsx).
+  // The student can change it later in Profile > About me.
+  async function handleContinue() {
+    if (!selected || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await update({ rideRole: selected });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+      setSaving(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -82,13 +94,23 @@ export default function ChooseRoleScreen() {
             pressed && selected && styles.buttonPressed,
             !selected && local.buttonInactive,
           ]}
-          onPress={() => selected && chooseRole(selected)}
-          disabled={!selected}
+          onPress={handleContinue}
+          disabled={!selected || saving}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !selected }}
+          accessibilityState={{ disabled: !selected || saving, busy: saving }}
         >
-          <Text style={styles.buttonText}>Continue</Text>
+          {saving ? (
+            <ActivityIndicator color={colors.onPrimary} />
+          ) : (
+            <Text style={styles.buttonText}>Continue</Text>
+          )}
         </Pressable>
+
+        {error ? (
+          <Text style={local.errorText} accessibilityRole="alert">
+            {error}
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -161,6 +183,13 @@ function createLocalStyles(colors: Colors) {
       height: 10,
       borderRadius: 5,
       backgroundColor: colors.primary,
+    },
+    errorText: {
+      color: colors.error,
+      fontSize: 14,
+      fontWeight: "500",
+      textAlign: "center",
+      marginTop: 12,
     },
     continueButton: {
       marginTop: 28,

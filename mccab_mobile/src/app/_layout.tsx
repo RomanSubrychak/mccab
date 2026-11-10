@@ -1,27 +1,37 @@
-import { Stack } from "expo-router";
+import { SplashScreen, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { ThemeProvider, useTheme, useThemeColors } from "@/constants/theme";
 import { SessionProvider, useSession } from "@/lib/session";
 
+// Keep the splash screen up until the saved login token has been read, so a
+// signed-in user doesn't see the login screen flash first.
+SplashScreen.preventAutoHideAsync();
+
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <SessionProvider>
+    <SessionProvider>
+      <ThemeProvider>
+        <SplashScreenController />
         <ThemedStack />
-      </SessionProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </SessionProvider>
   );
+}
+
+function SplashScreenController() {
+  const { isLoading } = useSession();
+  if (!isLoading) {
+    SplashScreen.hide();
+  }
+  return null;
 }
 
 function ThemedStack() {
   const { scheme } = useTheme();
   const colors = useThemeColors();
-  const { session } = useSession();
-
-  const signedIn = session !== null;
-  const termsAccepted = session?.termsAccepted ?? false;
-  const hasRole = session?.role != null;
+  const { token } = useSession();
+  const signedIn = Boolean(token);
 
   return (
     <>
@@ -33,27 +43,17 @@ function ThemedStack() {
           contentStyle: { backgroundColor: colors.background },
         }}
       >
-        {/* index redirects to the right screen for the session, so it is always available. */}
-        <Stack.Screen name="index" />
+        {/* Signed in: the app. Expo Router sends signed-out users to the first screen they can see. */}
+        <Stack.Protected guard={signedIn}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
 
+        {/* Signed out: login and account recovery. */}
         <Stack.Protected guard={!signedIn}>
           <Stack.Screen name="login" />
           <Stack.Screen name="signup" />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="reset-password" />
-        </Stack.Protected>
-
-        {/* Signed-in screens, in the order a new user goes through them. */}
-        <Stack.Protected guard={signedIn}>
-          <Stack.Protected guard={!termsAccepted}>
-            <Stack.Screen name="terms" />
-          </Stack.Protected>
-          <Stack.Protected guard={termsAccepted && !hasRole}>
-            <Stack.Screen name="choose-role" />
-          </Stack.Protected>
-          <Stack.Protected guard={termsAccepted && hasRole}>
-            <Stack.Screen name="home" />
-          </Stack.Protected>
         </Stack.Protected>
       </Stack>
     </>

@@ -17,7 +17,116 @@ model User {
   email          String          @unique
   name           String
   passwordHash   String
+  // Part of every login token. Changing or resetting the password increases it,
+  // which signs out every device that still has an older token.
+  tokenVersion   Int             @default(0)
+  createdAt      DateTime        @default(now())
   passwordResets PasswordReset[]
+  vehicle        Vehicle?
+
+  // About me
+  phone          String? // E.164, e.g. +13125550123
+  bio            String?
+  major          String?
+  graduationYear Int?
+  rideRole       RideRole? // null until the student picks one after accepting the terms
+  // What a RIDER_DRIVER is doing right now. RIDER is always riding and DRIVER
+  // always driving. DRIVING needs a valid licence and a car (see routes/me.ts).
+  activeMode     RideMode        @default(RIDING)
+
+  // When the student agreed to the Terms and Conditions. null means not yet.
+  termsAcceptedAt DateTime?
+
+  // My route
+  campus   Campus?
+  homeArea String? // Neighbourhood or area, never a full street address
+  rideDays Weekday[]
+  arriveBy String? // "HH:MM", 24-hour
+  leaveAt  String? // "HH:MM", 24-hour
+
+  // Ride preferences
+  pricePerSeatCents Int? // Drivers only
+  chatPreference    ChatPreference @default(SOME)
+  musicOk           Boolean        @default(true)
+  smokingOk         Boolean        @default(false)
+
+  // Driver's licence. Only the last 4 characters of the number are stored.
+  licenceState     String? // Two-letter US state, e.g. "IL"
+  licenceLast4     String?
+  licenceExpiresOn DateTime? @db.Date
+
+  // Car insurance. Only the last 4 characters of the policy number are stored.
+  insuranceProvider    String?
+  insurancePolicyLast4 String?
+  insuranceExpiresOn   DateTime? @db.Date
+
+  // Safety
+  emergencyContactName  String?
+  emergencyContactPhone String? // E.164
+  phoneVisibility       PhoneVisibility @default(CONFIRMED_RIDES)
+
+  // Notifications
+  notifyRideUpdates Boolean @default(true)
+  notifyMessages    Boolean @default(true)
+  notifyNews        Boolean @default(false)
+}
+
+// One car per driver.
+model Vehicle {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  make      String
+  model     String
+  year      Int?
+  color     String
+  plate     String
+  seats     Int // Seats offered to riders: 1 to 3
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// RIDER only books seats, DRIVER only offers them, RIDER_DRIVER does both and
+// switches between the two with activeMode.
+enum RideRole {
+  RIDER
+  DRIVER
+  RIDER_DRIVER
+}
+
+enum RideMode {
+  RIDING
+  DRIVING
+}
+
+// MCC campuses in the Chicago area.
+enum Campus {
+  CHICAGO_MAIN
+  CHICAGO_DOWNTOWN
+  NAPERVILLE
+  EVERGREEN_PARK
+}
+
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+enum ChatPreference {
+  QUIET
+  SOME
+  CHATTY
+}
+
+// Who can see the user's phone number.
+enum PhoneVisibility {
+  CONFIRMED_RIDES // Only people in a confirmed ride with them
+  NOBODY
 }
 
 model PasswordReset {

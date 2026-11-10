@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import { authRoutes } from "./routes/auth";
+import { meRoutes } from "./routes/me";
 
 dotenv.config();
 
@@ -15,6 +16,7 @@ app.get("/health", (req: Request, res: Response) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/me", meRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
