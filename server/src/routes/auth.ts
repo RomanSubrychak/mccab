@@ -36,7 +36,8 @@ function validateRegistration(name: unknown, email: unknown, password: unknown):
   }
   const domain = email.trim().toLowerCase().split("@")[1];
   if (ALLOWED_EMAIL_DOMAIN && domain !== ALLOWED_EMAIL_DOMAIN) {
-    return `Use your school email address (@${ALLOWED_EMAIL_DOMAIN}).`;
+    // Doesn't name the allowed domain on purpose.
+    return "Use your school email address.";
   }
   return validateNewPassword(password, [name.trim(), email.trim()]);
 }
