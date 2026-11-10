@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createHash, randomBytes } from "crypto";
 import { Request, Response, Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -13,6 +14,8 @@ const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_BYTES = 72;
 const BCRYPT_ROUNDS = 10;
 const TOKEN_LIFETIME = "7d";
+const RESET_TOKEN_BYTES = 32;
+const RESET_LIFETIME_MS = 15 * 60 * 1000;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -39,14 +42,22 @@ function validateRegistration(name: unknown, email: unknown, password: unknown):
   if (ALLOWED_EMAIL_DOMAIN && domain !== ALLOWED_EMAIL_DOMAIN) {
     return `Use your school email address (@${ALLOWED_EMAIL_DOMAIN}).`;
   }
+  return validateNewPassword(password, [name.trim(), email.trim()]);
+}
+
+// Length checks run before zxcvbn so very long input never reaches it.
+function validateNewPassword(password: unknown, userInputs: string[]): string | null {
   if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
     return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
   }
   if (Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
     return `Password must be at most ${MAX_PASSWORD_BYTES} characters.`;
   }
-  // Runs last: the length checks above keep very long input away from it.
-  return getPasswordProblem(password, [name, email]);
+  return getPasswordProblem(password, userInputs);
+}
+
+function hashResetToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 // POST /auth/register  { name, email, password } -> 201 { token, user }
@@ -81,6 +92,90 @@ authRoutes.post("/register", async (req: Request, res: Response) => {
     }
     throw err;
   }
+});
+
+// Creates a reset code when the email has an account. Does nothing otherwise.
+async function createPasswordReset(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true },
+  });
+  if (!user) return;
+
+  const token = randomBytes(RESET_TOKEN_BYTES).toString("base64url");
+  const expiresAt = new Date(Date.now() + RESET_LIFETIME_MS);
+  await prisma.$transaction([
+    prisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } }),
+    prisma.passwordReset.create({
+      data: { userId: user.id, tokenHash: hashResetToken(token), expiresAt },
+    }),
+  ]);
+  console.log(
+    `Password reset for ${user.email}: ${token} mccabmobile://reset-password?token=${token}`,
+  );
+}
+
+// POST /auth/forgot-password  { email } -> 200 { ok: true }
+// Always the same response when the email is well formed, so addresses can't be probed.
+authRoutes.post("/forgot-password", (req: Request, res: Response) => {
+  const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  if (!EMAIL_PATTERN.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address." });
+    return;
+  }
+
+  // Respond before looking up the account. Only real accounts get a code, so
+  // waiting for that work would make their responses measurably slower.
+  res.json({ ok: true });
+
+  createPasswordReset(email).catch((err) => {
+    console.error("Failed to create password reset:", err);
+  });
+});
+
+// POST /auth/reset-password  { token, password } -> 200 { ok: true }
+authRoutes.post("/reset-password", async (req: Request, res: Response) => {
+  const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  const password = req.body?.password;
+
+  if (token.length === 0) {
+    res.status(400).json({ error: "Enter the reset code." });
+    return;
+  }
+
+  const reset = await prisma.passwordReset.findUnique({
+    where: { tokenHash: hashResetToken(token) },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  if (!reset || reset.usedAt || reset.expiresAt.getTime() <= Date.now()) {
+    res.status(400).json({ error: "This reset code is invalid or has expired." });
+    return;
+  }
+
+  const passwordError = validateNewPassword(password, [reset.user.name, reset.user.email]);
+  if (passwordError) {
+    res.status(400).json({ error: passwordError });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+  const updated = await prisma.$transaction(async (tx) => {
+    // Claim the code and check it in one statement. Two requests with the same
+    // code can both pass the check above; the database lets only one of them
+    // change usedAt, and the other gets count 0.
+    const { count } = await tx.passwordReset.updateMany({
+      where: { id: reset.id, usedAt: null, expiresAt: { gt: new Date() } },
+      data: { usedAt: new Date() },
+    });
+    if (count === 0) return false;
+    await tx.user.update({ where: { id: reset.userId }, data: { passwordHash } });
+    return true;
+  });
+  if (!updated) {
+    res.status(400).json({ error: "This reset code is invalid or has expired." });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // Compared against when the email has no account, so a wrong email takes as long
