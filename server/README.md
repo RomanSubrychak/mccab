@@ -78,7 +78,7 @@ server/
 │   │   ├── password-strength.ts  # password strength check (zxcvbn)
 │   │   └── prisma.ts        # shared Prisma client, import it from here
 │   ├── routes/
-│   │   └── auth.ts          # /auth endpoints (sign up)
+│   │   └── auth.ts          # /auth endpoints (sign up, sign in, password reset)
 │   └── generated/prisma/    # generated client (git-ignored, do not edit)
 ├── .env.example
 ├── package.json
@@ -91,10 +91,13 @@ server/
 | --- | --- | --- |
 | `GET` | `/health` | `{"status":"ok"}` |
 | `POST` | `/auth/register` | Body `{name, email, password}`. `201` with `{token, user}`, `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
+| `POST` | `/auth/login` | Body `{email, password}`. `200` with `{token, user}`. `400` with `{error}` when a field is missing. `401` with `{error}` for a wrong email or a wrong password (same message either way). |
+| `POST` | `/auth/forgot-password` | Body `{email}`. `400` with `{error}` when the email is invalid. Otherwise `200` with `{ok: true}`, including when no account exists. If the account exists, the server prints a one-time code (valid for 15 minutes) in its terminal. No email is sent. |
+| `POST` | `/auth/reset-password` | Body `{token, password}`. `200` with `{ok: true}` after the password is updated. `400` with `{error}` when the code is missing, expired, or already used, or when the new password is too weak. |
 
 All requests and responses use JSON. CORS is enabled so the mobile app can call the API.
 
-Login, password reset, ride and booking endpoints are not built yet. When you add a route, add it to this table.
+Ride and booking endpoints are not built yet. When you add a route, add it to this table.
 
 ### Using the database in a route
 
@@ -116,6 +119,7 @@ Current models (see `prisma/schema.prisma`):
 | Model | Fields |
 | --- | --- |
 | `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API) |
+| `PasswordReset` | `id`, `userId`, `tokenHash` (unique SHA-256 of the reset code), `expiresAt`, `usedAt`, `createdAt`. Deleted when the user is deleted. |
 
 To change the schema:
 

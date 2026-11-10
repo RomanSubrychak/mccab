@@ -5,13 +5,15 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { TextField } from "@/components/text-field";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useThemeColors } from "@/constants/theme";
 import { ApiError, requestPasswordReset } from "@/lib/api";
 import { createAuthStyles } from "@/styles/auth";
@@ -21,6 +23,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function ForgotPasswordScreen() {
   const colors = useThemeColors();
   const styles = createAuthStyles(colors);
+  const local = createLocalStyles();
+  const insets = useSafeAreaInsets();
 
   // The login screen passes along whatever email was already typed.
   const params = useLocalSearchParams<{ email?: string }>();
@@ -39,10 +43,15 @@ export default function ForgotPasswordScreen() {
   }
 
   async function handleSubmit() {
-    const trimmedEmail = email.trim().toLowerCase();
+    if (submitting) return;
 
+    const trimmedEmail = email.trim().toLowerCase();
+    if (trimmedEmail.length === 0) {
+      setError("Enter your school email.");
+      return;
+    }
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setError("Enter a valid email address.");
+      setError("Enter a valid email address, like you@school.edu.");
       return;
     }
 
@@ -60,6 +69,10 @@ export default function ForgotPasswordScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={[local.topBar, { top: insets.top + 12 }]}>
+        <ThemeToggle />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -72,57 +85,72 @@ export default function ForgotPasswordScreen() {
             <View style={styles.logo}>
               <Text style={styles.logoText}>M</Text>
             </View>
-            <Text style={styles.appName}>MCCab</Text>
+            <Text style={styles.appName} accessibilityRole="header">
+              MCCab
+            </Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.title}>Reset your password</Text>
+            <View style={styles.cardHeader}>
+              <Text style={styles.title} accessibilityRole="header">
+                Reset your password
+              </Text>
+            </View>
 
             {sentTo ? (
               <>
                 {/* Same message whether or not the account exists, so emails can't be probed. */}
-                <Text style={styles.successText}>
-                  If an account exists for {sentTo}, we sent a link to reset your password.
-                  Check your inbox and spam folder.
-                </Text>
+                <View style={styles.successBox} accessibilityLiveRegion="polite">
+                  <Text style={styles.successText}>
+                    If an account exists for {sentTo}, a reset code was printed in the server
+                    terminal. It expires in 15 minutes.
+                  </Text>
+                </View>
                 <Pressable
                   style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                  onPress={goToLogin}
+                  onPress={() => router.push("/reset-password")}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.buttonText}>Back to sign in</Text>
+                  <Text style={styles.buttonText}>Enter reset code</Text>
+                </Pressable>
+                <Pressable
+                  onPress={goToLogin}
+                  accessibilityRole="link"
+                  hitSlop={8}
+                  style={local.secondaryLink}
+                >
+                  {({ pressed }) => (
+                    <Text style={[styles.inlineLink, pressed && styles.linkPressed]}>
+                      Back to sign in
+                    </Text>
+                  )}
                 </Pressable>
               </>
             ) : (
               <>
-                <Text style={styles.hint}>
-                  Enter your school email and we&apos;ll send you a link to reset your password.
+                <Text style={styles.subtitle}>
+                  Enter your school email. If an account exists, the server terminal prints a code
+                  you can use to choose a new password.
                 </Text>
 
-                <View style={styles.field}>
-                  <Text style={styles.label}>School email</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="you@school.edu"
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    returnKeyType="send"
-                    onSubmitEditing={handleSubmit}
-                    editable={!submitting}
-                  />
-                </View>
-
-                {error ? (
-                  <View style={styles.errorBox} accessibilityRole="alert">
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                ) : null}
+                <TextField
+                  label="School email"
+                  value={email}
+                  onChangeText={(value) => {
+                    setEmail(value);
+                    if (error) setError(null);
+                  }}
+                  error={error}
+                  placeholder="you@school.edu"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="send"
+                  onSubmitEditing={handleSubmit}
+                  editable={!submitting}
+                />
 
                 <Pressable
                   style={({ pressed }) => [
@@ -136,30 +164,54 @@ export default function ForgotPasswordScreen() {
                   accessibilityState={{ disabled: submitting, busy: submitting }}
                 >
                   {submitting ? (
-                    <ActivityIndicator color={colors.onPrimary} />
+                    <View style={local.buttonBusy}>
+                      <ActivityIndicator color={colors.onPrimary} size="small" />
+                      <Text style={styles.buttonText}>Sending…</Text>
+                    </View>
                   ) : (
-                    <Text style={styles.buttonText}>Send reset link</Text>
+                    <Text style={styles.buttonText}>Get reset code</Text>
                   )}
                 </Pressable>
+
+                <View style={styles.divider} />
+
+                <View style={[styles.footer, styles.footerInCard]}>
+                  <Text style={styles.footerText}>Remembered it?</Text>
+                  <Pressable
+                    style={styles.footerLinkHit}
+                    onPress={goToLogin}
+                    accessibilityRole="link"
+                    disabled={submitting}
+                  >
+                    {({ pressed }) => (
+                      <Text style={[styles.footerLink, pressed && styles.linkPressed]}>Sign in</Text>
+                    )}
+                  </Pressable>
+                </View>
               </>
             )}
           </View>
-
-          {sentTo ? null : (
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>Remembered it?</Text>
-              <Pressable
-                onPress={goToLogin}
-                accessibilityRole="link"
-                hitSlop={8}
-                disabled={submitting}
-              >
-                <Text style={styles.footerLink}>Sign in</Text>
-              </Pressable>
-            </View>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function createLocalStyles() {
+  return StyleSheet.create({
+    topBar: {
+      position: "absolute",
+      right: 16,
+      zIndex: 1,
+    },
+    buttonBusy: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    secondaryLink: {
+      alignSelf: "center",
+      paddingVertical: 4,
+    },
+  });
 }
