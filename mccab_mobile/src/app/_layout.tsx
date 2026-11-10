@@ -40,6 +40,7 @@ function ThemedStack() {
           <Stack.Screen name="login" />
           <Stack.Screen name="signup" />
           <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
         </Stack.Protected>
 
         {/* Signed-in screens, in the order a new user goes through them. */}

@@ -11,7 +11,15 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 type ErrorMessages = {
   // Message to show for specific HTTP status codes.
@@ -41,12 +49,15 @@ async function postJson<T>(path: string, body: unknown, messages: ErrorMessages)
   if (!response.ok) {
     const statusMessage = messages.byStatus?.[response.status];
     if (statusMessage) {
-      throw new ApiError(statusMessage);
+      throw new ApiError(statusMessage, response.status);
     }
     if (response.status === 404) {
-      throw new ApiError(`${messages.feature} isn't available on the server yet.`);
+      throw new ApiError(`${messages.feature} isn't available on the server yet.`, response.status);
     }
-    throw new ApiError(data?.error ?? `Something went wrong (${response.status}). Try again.`);
+    throw new ApiError(
+      data?.error ?? `Something went wrong (${response.status}). Try again.`,
+      response.status,
+    );
   }
 
   return data as T;
@@ -70,4 +81,12 @@ export function register(name: string, email: string, password: string): Promise
 
 export async function requestPasswordReset(email: string): Promise<void> {
   await postJson<unknown>("/auth/forgot-password", { email }, { feature: "Password reset" });
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await postJson<unknown>(
+    "/auth/reset-password",
+    { token, password },
+    { feature: "Password reset" },
+  );
 }
