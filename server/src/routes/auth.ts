@@ -82,3 +82,43 @@ authRoutes.post("/register", async (req: Request, res: Response) => {
     throw err;
   }
 });
+
+// Compared against when the email has no account, so a wrong email takes as long
+// as a wrong password and response time doesn't reveal which emails are registered.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("not-a-real-password", BCRYPT_ROUNDS);
+
+// POST /auth/login  { email, password } -> 200 { token, user }
+authRoutes.post("/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body ?? {};
+
+  if (typeof email !== "string" || email.trim().length === 0) {
+    res.status(400).json({ error: "Enter your email address." });
+    return;
+  }
+  if (typeof password !== "string" || password.length === 0) {
+    res.status(400).json({ error: "Enter your password." });
+    return;
+  }
+  // Same limit as sign-up: no account can have a longer password.
+  if (Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
+    res.status(401).json({ error: "Incorrect email or password." });
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: email.trim().toLowerCase() },
+    select: { id: true, email: true, name: true, passwordHash: true },
+  });
+
+  const passwordMatches = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordMatches) {
+    // One message for both cases, so the app can't be used to check which emails exist.
+    res.status(401).json({ error: "Incorrect email or password." });
+    return;
+  }
+
+  const token = jwt.sign({ sub: String(user.id) }, JWT_SECRET, {
+    expiresIn: TOKEN_LIFETIME,
+  });
+  res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+});

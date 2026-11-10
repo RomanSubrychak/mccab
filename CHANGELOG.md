@@ -9,10 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `CHANGELOG.md` to track project changes.
+- `POST /auth/login` endpoint on the server: checks the email and password and returns a 7-day JWT and the user, in the same format as `/auth/register`. A wrong email and a wrong password get the same `401` message and take the same time, so it can't be used to find out which emails have accounts.
 - `POST /auth/register` sign-up endpoint on the server: bcrypt password hashing, a 7-day JWT, a zxcvbn password strength check, and an optional `ALLOWED_EMAIL_DOMAIN` restriction. Adds a required `passwordHash` column to `User`, so run `npx prisma migrate deploy` and `npx prisma generate`, and add `ALLOWED_EMAIL_DOMAIN` to `server/.env` after pulling. If your local `User` table has rows, delete them first or the migration fails.
 
 ### Fixed
 
+- On web, the app no longer logs a React hydration error in dark mode. The page was rendered on the server in the light theme, but the browser's first render used the dark one. It now starts in light and switches to dark right after loading.
 - Setup docs now say to run `npx prisma generate` after `npm install`, because npm 11+ skips the `postinstall` script that used to do it.
 - Setup docs now explain how to generate `JWT_SECRET`.
 
