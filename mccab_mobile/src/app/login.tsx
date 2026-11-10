@@ -17,7 +17,8 @@ import { TextField } from "@/components/text-field";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SCHOOL_EMAIL_EXAMPLE } from "@/constants/school";
 import { useThemeColors, type Colors } from "@/constants/theme";
-import { ApiError, login, type AuthUser } from "@/lib/api";
+import { ApiError, login } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { createAuthStyles } from "@/styles/auth";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -32,6 +33,7 @@ export default function LoginScreen() {
   const styles = createAuthStyles(colors);
   const local = createLocalStyles(colors);
   const insets = useSafeAreaInsets();
+  const { signIn } = useSession();
 
   const passwordRef = useRef<TextInputInstance>(null);
 
@@ -40,7 +42,6 @@ export default function LoginScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
 
   function validate(trimmedEmail: string): FieldErrors {
     const errors: FieldErrors = {};
@@ -71,8 +72,9 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       const result = await login(trimmedEmail, password);
-      // TODO: store result.token securely and navigate to the home screen.
-      setUser(result.user);
+      // Saving the token switches the app to the signed-in screens.
+      signIn(result.token);
+      router.replace("/");
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -129,11 +131,6 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {user ? (
-              <View style={styles.successBox} accessibilityLiveRegion="polite">
-                <Text style={styles.successText}>Signed in as {user.name}.</Text>
-              </View>
-            ) : null}
 
             <View style={styles.form}>
               <TextField

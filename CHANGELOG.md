@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- User profile. In the app: Home, Rides and Profile tabs. The Profile tab shows the student's details, rating and ride counts, with screens to edit About me, My car (drivers), My route (one of the four Chicago-area MCC campuses, home area, days and times), Ride preferences (price per seat, conversation, music, smoking), Safety (emergency contact, who sees your phone number), notification settings, light/dark theme, change password, log out and delete account. On the server: `GET`/`PATCH /me`, `PUT`/`DELETE /me/vehicle`, `POST /me/password` and `DELETE /me`, behind a new `requireAuth` middleware. Adds profile columns to `User` and a `Vehicle` table, so run `npx prisma migrate deploy` and `npx prisma generate` after pulling. Existing accounts keep working; the new columns are optional or have defaults.
+- The app stays signed in: the login token is saved with `expo-secure-store` on phones and in browser storage on web. Signed-out users can only see the login, sign-up and password reset screens. Run `npm install` in `mccab_mobile/` after pulling.
+- The light/dark theme choice is saved and survives restarts.
 - `POST /auth/forgot-password` and `POST /auth/reset-password`. A reset code is printed in the server terminal (no email is sent), stored as a hash, and expires after 15 minutes. Adds a `PasswordReset` table, so run `npx prisma migrate deploy` and `npx prisma generate` after pulling.
 - Sign-up screen with per-field errors, and screens to request a reset code and set a new password.
 - `CHANGELOG.md` to track project changes.
@@ -17,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Sign-up only accepts `@mccollege.edu` email addresses (exact domain, no subdomains). The app shows "Use your school email address (@mccollege.edu)." under the email field, and the server refuses other domains with the same message. `ALLOWED_EMAIL_DOMAIN` now defaults to `mccollege.edu` when missing or empty; set it to `*` to allow any email for local testing. Login and password reset are not limited.
+
+### Security
+
+- Changing or resetting a password now signs out every other device. Login tokens carry a version number that goes up on each change, and older tokens are refused.
 
 ### Fixed
 

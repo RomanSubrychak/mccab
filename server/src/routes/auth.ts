@@ -2,25 +2,15 @@ import "dotenv/config";
 import { createHash, randomBytes } from "crypto";
 import { Request, Response, Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 
 import { Prisma } from "../generated/prisma/client";
-import { getPasswordProblem } from "../lib/password-strength";
+import { signToken } from "../lib/auth-token";
+import { BCRYPT_ROUNDS, MAX_PASSWORD_BYTES, validateNewPassword } from "../lib/password-strength";
 import { prisma } from "../lib/prisma";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 8;
-// bcrypt ignores everything after 72 bytes, so longer passwords are rejected.
-const MAX_PASSWORD_BYTES = 72;
-const BCRYPT_ROUNDS = 10;
-const TOKEN_LIFETIME = "7d";
 const RESET_TOKEN_BYTES = 32;
 const RESET_LIFETIME_MS = 15 * 60 * 1000;
-
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is not set. Add it to server/.env (see .env.example).");
-}
 
 // Only emails at exactly this domain can sign up (no subdomains). Login and
 // password reset are not limited. Defaults to mccollege.edu when the variable is
@@ -51,17 +41,6 @@ function validateRegistration(name: unknown, email: unknown, password: unknown):
   return validateNewPassword(password, [name.trim(), email.trim()]);
 }
 
-// Length checks run before zxcvbn so very long input never reaches it.
-function validateNewPassword(password: unknown, userInputs: string[]): string | null {
-  if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
-    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
-  }
-  if (Buffer.byteLength(password) > MAX_PASSWORD_BYTES) {
-    return `Password must be at most ${MAX_PASSWORD_BYTES} characters.`;
-  }
-  return getPasswordProblem(password, userInputs);
-}
-
 function hashResetToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -83,12 +62,12 @@ authRoutes.post("/register", async (req: Request, res: Response) => {
     const user = await prisma.user.create({
       data: { name: name.trim(), email: email.trim().toLowerCase(), passwordHash },
       // Never send passwordHash back to the app.
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, tokenVersion: true },
     });
-    const token = jwt.sign({ sub: String(user.id) }, JWT_SECRET, {
-      expiresIn: TOKEN_LIFETIME,
+    res.status(201).json({
+      token: signToken(user),
+      user: { id: user.id, email: user.email, name: user.name },
     });
-    res.status(201).json({ token, user });
   } catch (err) {
     // P2002 = unique constraint failed. Relying on the database here means two
     // requests at the same moment can't both create the same email.
@@ -174,7 +153,11 @@ authRoutes.post("/reset-password", async (req: Request, res: Response) => {
       data: { usedAt: new Date() },
     });
     if (count === 0) return false;
-    await tx.user.update({ where: { id: reset.userId }, data: { passwordHash } });
+    // Bumping tokenVersion signs out every device that was logged in before the reset.
+    await tx.user.update({
+      where: { id: reset.userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
     return true;
   });
   if (!updated) {
@@ -208,7 +191,7 @@ authRoutes.post("/login", async (req: Request, res: Response) => {
 
   const user = await prisma.user.findUnique({
     where: { email: email.trim().toLowerCase() },
-    select: { id: true, email: true, name: true, passwordHash: true },
+    select: { id: true, email: true, name: true, passwordHash: true, tokenVersion: true },
   });
 
   const passwordMatches = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
@@ -218,8 +201,5 @@ authRoutes.post("/login", async (req: Request, res: Response) => {
     return;
   }
 
-  const token = jwt.sign({ sub: String(user.id) }, JWT_SECRET, {
-    expiresIn: TOKEN_LIFETIME,
-  });
-  res.json({ token, user: { id: user.id, email: user.email, name: user.name } });
+  res.json({ token: signToken(user), user: { id: user.id, email: user.email, name: user.name } });
 });
