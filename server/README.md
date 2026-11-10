@@ -109,6 +109,7 @@ These need the login token in an `Authorization: Bearer <token>` header. A missi
 | --- | --- | --- |
 | `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, plus `vehicle` (or `null`) and `stats` (ratings and ride counts, all zero until rides exist). |
 | `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
+| `POST` | `/me/terms` | Records that the student agreed to the Terms and Conditions (keeps the first date). `200` with `{profile}`. |
 | `PUT` | `/me/vehicle` | Body `{make, model, year?, color, plate, seats}` (1 to 3 seats). Creates or replaces the user's car. `200` with `{profile}`. |
 | `DELETE` | `/me/vehicle` | Removes the car. `200` with `{profile}`. |
 | `POST` | `/me/password` | Body `{currentPassword, newPassword}`. `200` with `{token}`. Signs out every other device; use the new token on this one. |
@@ -137,7 +138,7 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`BOTH`), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews` |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`RIDER_DRIVER`, `null` until the student picks one), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews` |
 | `Vehicle` | `id`, `userId` (unique: one car per user), `make`, `model`, `year`, `color`, `plate`, `seats` (1 to 3), `createdAt`, `updatedAt`. Deleted when the user is deleted. |
 | `PasswordReset` | `id`, `userId`, `tokenHash` (unique SHA-256 of the reset code), `expiresAt`, `usedAt`, `createdAt`. Deleted when the user is deleted. |
 

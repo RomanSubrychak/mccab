@@ -29,7 +29,10 @@ model User {
   bio            String?
   major          String?
   graduationYear Int?
-  rideRole       RideRole        @default(RIDER)
+  rideRole       RideRole? // null until the student picks one after accepting the terms
+
+  // When the student agreed to the Terms and Conditions. null means not yet.
+  termsAcceptedAt DateTime?
 
   // My route
   campus   Campus?
@@ -70,10 +73,10 @@ model Vehicle {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// Every student can ride. RIDER_DRIVER can also offer rides in their own car.
 enum RideRole {
   RIDER
-  DRIVER
-  BOTH
+  RIDER_DRIVER
 }
 
 // MCC campuses in the Chicago area.

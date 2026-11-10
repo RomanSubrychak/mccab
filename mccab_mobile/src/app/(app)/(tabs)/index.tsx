@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { SettingsGroup, SettingsRow } from "@/components/settings";
 import { InfoCard, TabScreen } from "@/components/tab-screen";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { rideRoleLabel } from "@/constants/profile-options";
 import { useThemeColors, type Colors } from "@/constants/theme";
 import { firstName } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
@@ -18,7 +19,11 @@ export default function HomeScreen() {
   return (
     <TabScreen
       title={profile ? `Hi, ${firstName(profile.name)}` : "Hi"}
-      subtitle="Share rides to campus with fellow MCC students."
+      subtitle={
+        profile?.rideRole
+          ? `You're using MCCab as a ${rideRoleLabel(profile.rideRole)}.`
+          : "Share rides to campus with fellow MCC students."
+      }
       headerRight={<ThemeToggle />}
     >
       {missing.length > 0 ? (

@@ -12,7 +12,7 @@ import { currentUserId, requireAuth } from "../middleware/require-auth";
 export const meRoutes = Router();
 meRoutes.use(requireAuth);
 
-const RIDE_ROLES = ["RIDER", "DRIVER", "BOTH"] as const;
+const RIDE_ROLES = ["RIDER", "RIDER_DRIVER"] as const;
 const CAMPUSES = ["CHICAGO_MAIN", "CHICAGO_DOWNTOWN", "NAPERVILLE", "EVERGREEN_PARK"] as const;
 const WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
 const CHAT_PREFERENCES = ["QUIET", "SOME", "CHATTY"] as const;
@@ -32,6 +32,7 @@ const PROFILE_SELECT = {
   major: true,
   graduationYear: true,
   rideRole: true,
+  termsAcceptedAt: true,
   campus: true,
   homeArea: true,
   rideDays: true,
@@ -239,6 +240,17 @@ meRoutes.patch("/", async (req: Request, res: Response) => {
     select: PROFILE_SELECT,
   });
   res.json({ profile: withStats(user) });
+});
+
+// POST /me/terms -> 200 { profile }
+// Records that the student agreed to the Terms and Conditions. Keeps the first date.
+meRoutes.post("/terms", async (req: Request, res: Response) => {
+  const userId = currentUserId(res);
+  await prisma.user.updateMany({
+    where: { id: userId, termsAcceptedAt: null },
+    data: { termsAcceptedAt: new Date() },
+  });
+  res.json({ profile: await loadProfile(userId) });
 });
 
 // PUT /me/vehicle  { make, model, year?, color, plate, seats } -> 200 { profile }

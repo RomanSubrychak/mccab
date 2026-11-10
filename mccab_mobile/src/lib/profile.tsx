@@ -12,6 +12,7 @@ type ProfileContextValue = {
   reload: () => void;
   // These throw ApiError on failure so screens can show the message by the right field.
   update: (changes: ProfileChanges) => Promise<void>;
+  acceptTerms: () => Promise<void>;
   saveVehicle: (vehicle: VehicleInput) => Promise<void>;
   removeVehicle: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -65,6 +66,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     reload,
     update: async (changes) => {
       setProfile(await withToken((t) => api.updateProfile(t, changes)));
+    },
+    acceptTerms: async () => {
+      setProfile(await withToken(api.acceptTerms));
     },
     saveVehicle: async (vehicle) => {
       setProfile(await withToken((t) => api.saveVehicle(t, vehicle)));

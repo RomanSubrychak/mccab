@@ -1,20 +1,34 @@
 // Choices on the profile page. The values match the enums in
 // server/prisma/schema.prisma; keep both in sync.
 
-export type RideRole = "RIDER" | "DRIVER" | "BOTH";
+export type RideRole = "RIDER" | "RIDER_DRIVER";
 export type Campus = "CHICAGO_MAIN" | "CHICAGO_DOWNTOWN" | "NAPERVILLE" | "EVERGREEN_PARK";
 export type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 export type ChatPreference = "QUIET" | "SOME" | "CHATTY";
 export type PhoneVisibility = "CONFIRMED_RIDES" | "NOBODY";
 
-export const RIDE_ROLES: { value: RideRole; label: string; description: string }[] = [
-  { value: "RIDER", label: "Rider", description: "I need rides" },
-  { value: "DRIVER", label: "Driver", description: "I offer rides" },
-  { value: "BOTH", label: "Both", description: "I do both" },
+// Every student can ride. "Rider & Driver" can also offer rides in their own car.
+export const RIDE_ROLES: { value: RideRole; label: string; emoji: string; description: string }[] = [
+  {
+    value: "RIDER",
+    label: "Rider",
+    emoji: "🎒",
+    description: "Find a seat with a classmate who's already driving to campus.",
+  },
+  {
+    value: "RIDER_DRIVER",
+    label: "Rider & Driver",
+    emoji: "🚗",
+    description: "Book seats when you need one, and offer rides in your own car to 2 or 3 students.",
+  },
 ];
 
-export function isDriver(role: RideRole): boolean {
-  return role === "DRIVER" || role === "BOTH";
+export function rideRoleLabel(role: RideRole | null): string | null {
+  return RIDE_ROLES.find((option) => option.value === role)?.label ?? null;
+}
+
+export function isDriver(role: RideRole | null): boolean {
+  return role === "RIDER_DRIVER";
 }
 
 // MCC campuses in the Chicago area (https://www.mccollege.edu/locations).

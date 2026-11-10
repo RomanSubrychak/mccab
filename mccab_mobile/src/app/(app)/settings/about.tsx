@@ -26,7 +26,8 @@ function AboutForm({ profile }: { profile: Profile }) {
     profile.graduationYear ? String(profile.graduationYear) : "",
   );
   const [bio, setBio] = useState(profile.bio ?? "");
-  const [rideRole, setRideRole] = useState<RideRole>(profile.rideRole);
+  // Students reach this screen after choosing a role, so null is only a fallback.
+  const [rideRole, setRideRole] = useState<RideRole>(profile.rideRole ?? "RIDER");
 
   function handleSave() {
     const year = graduationYear.trim();

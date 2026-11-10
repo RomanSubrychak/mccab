@@ -35,7 +35,10 @@ export type Profile = AuthUser & {
   bio: string | null;
   major: string | null;
   graduationYear: number | null;
-  rideRole: RideRole;
+  // null until the student picks one after accepting the terms.
+  rideRole: RideRole | null;
+  // When the student agreed to the Terms and Conditions, or null.
+  termsAcceptedAt: string | null;
   campus: Campus | null;
   homeArea: string | null;
   rideDays: Weekday[];
@@ -62,8 +65,11 @@ export type Profile = AuthUser & {
 
 // The profile fields PATCH /me accepts. Send only the ones that change.
 export type ProfileChanges = Partial<
-  Omit<Profile, "id" | "email" | "createdAt" | "vehicle" | "stats">
->;
+  Omit<Profile, "id" | "email" | "createdAt" | "termsAcceptedAt" | "vehicle" | "stats" | "rideRole">
+> & {
+  // A role can be chosen or changed, but not cleared.
+  rideRole?: RideRole;
+};
 
 export type VehicleInput = Vehicle;
 
@@ -179,6 +185,15 @@ export async function updateProfile(token: string, changes: ProfileChanges): Pro
     body: changes,
     token,
     feature: "Profile",
+  });
+  return data.profile;
+}
+
+export async function acceptTerms(token: string): Promise<Profile> {
+  const data = await request<{ profile: Profile }>("/me/terms", {
+    method: "POST",
+    token,
+    feature: "Terms",
   });
   return data.profile;
 }

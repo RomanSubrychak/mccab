@@ -72,9 +72,9 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       const result = await login(trimmedEmail, password);
-      // Saving the token switches the app to the signed-in screens.
+      // Saving the token switches to the signed-in screens: the terms, the role
+      // choice or the tabs, depending on how far the student got (see (app)/_layout.tsx).
       signIn(result.token);
-      router.replace("/");
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {

@@ -12,10 +12,10 @@ import {
 import { TabScreen } from "@/components/tab-screen";
 import {
   CHAT_PREFERENCES,
-  RIDE_ROLES,
   WEEKDAYS,
   campusLabel,
   isDriver,
+  rideRoleLabel,
 } from "@/constants/profile-options";
 import { useTheme, useThemeColors, type Colors, type ThemePreference } from "@/constants/theme";
 import { ApiError, type Profile, type ProfileChanges } from "@/lib/api";
@@ -74,7 +74,9 @@ export default function ProfileScreen() {
           <Text style={styles.name}>{profile.name}</Text>
           <Text style={styles.muted}>{profile.email}</Text>
           <View style={styles.badges}>
-            <Badge styles={styles} label={RIDE_ROLES.find((role) => role.value === profile.rideRole)!.label} />
+            {profile.rideRole ? (
+              <Badge styles={styles} label={rideRoleLabel(profile.rideRole)!} />
+            ) : null}
             {profile.campus ? <Badge styles={styles} label={campusLabel(profile.campus)!} /> : null}
           </View>
         </View>
