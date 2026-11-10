@@ -14,6 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { TextField } from "@/components/text-field";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SCHOOL_EMAIL_EXAMPLE } from "@/constants/school";
 import { useThemeColors } from "@/constants/theme";
 import { ApiError, requestPasswordReset } from "@/lib/api";
 import { createAuthStyles } from "@/styles/auth";
@@ -51,7 +52,7 @@ export default function ForgotPasswordScreen() {
       return;
     }
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setError("Enter a valid email address, like you@school.edu.");
+      setError(`Enter a valid email address, like ${SCHOOL_EMAIL_EXAMPLE}.`);
       return;
     }
 
@@ -141,7 +142,7 @@ export default function ForgotPasswordScreen() {
                     if (error) setError(null);
                   }}
                   error={error}
-                  placeholder="you@school.edu"
+                  placeholder={SCHOOL_EMAIL_EXAMPLE}
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="email"

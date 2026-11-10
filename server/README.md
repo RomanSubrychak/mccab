@@ -30,7 +30,7 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | `PORT` | `3000` | Port the API listens on. Defaults to `3000`. |
 | `DATABASE_URL` | `postgresql://postgres:<password>@localhost:5432/rideshare` | PostgreSQL connection string. The format depends on your OS; see the [main README](../README.md#server-setup). |
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Required: the server won't start without it. |
-| `ALLOWED_EMAIL_DOMAIN` | `school.edu` | Only emails at this domain can sign up. If empty, any email can sign up and the server logs a warning. |
+| `ALLOWED_EMAIL_DOMAIN` | `mccollege.edu` | Only emails at exactly this domain can sign up (subdomains are refused). Login and password reset are not limited. If missing or empty, it defaults to `mccollege.edu`. Set it to `*` to allow any email for local testing; the server then logs a warning. |
 
 ### Generating `JWT_SECRET`
 

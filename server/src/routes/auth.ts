@@ -22,10 +22,16 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is not set. Add it to server/.env (see .env.example).");
 }
 
-// For example "school.edu". When empty, any email address can sign up.
-const ALLOWED_EMAIL_DOMAIN = process.env.ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
+// Only emails at exactly this domain can sign up (no subdomains). Login and
+// password reset are not limited. Defaults to mccollege.edu when the variable is
+// missing or empty, so a forgotten setting can't open sign-up to everyone.
+// Set it to "*" to allow any email, for local testing only.
+const DEFAULT_EMAIL_DOMAIN = "mccollege.edu";
+const configuredDomain = process.env.ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
+const ALLOWED_EMAIL_DOMAIN =
+  configuredDomain === "*" ? null : configuredDomain || DEFAULT_EMAIL_DOMAIN;
 if (!ALLOWED_EMAIL_DOMAIN) {
-  console.warn("ALLOWED_EMAIL_DOMAIN is not set: sign up is open to any email address.");
+  console.warn('ALLOWED_EMAIL_DOMAIN is "*": sign up is open to any email address.');
 }
 
 export const authRoutes = Router();

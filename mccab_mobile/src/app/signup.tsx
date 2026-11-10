@@ -15,6 +15,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { TextField } from "@/components/text-field";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SCHOOL_EMAIL_DOMAIN, SCHOOL_EMAIL_EXAMPLE, isSchoolEmail } from "@/constants/school";
 import { useThemeColors, type Colors } from "@/constants/theme";
 import { ApiError, register } from "@/lib/api";
 import { createAuthStyles } from "@/styles/auth";
@@ -66,7 +67,10 @@ export default function SignUpScreen() {
     if (trimmedEmail.length === 0) {
       errors.email = "Enter your school email.";
     } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      errors.email = "Enter a valid email address, like you@school.edu.";
+      errors.email = `Enter a valid email address, like ${SCHOOL_EMAIL_EXAMPLE}.`;
+    } else if (!isSchoolEmail(trimmedEmail)) {
+      // Same message as the server, which checks this too.
+      errors.email = `Use your school email address (@${SCHOOL_EMAIL_DOMAIN}).`;
     }
     if (password.length < MIN_PASSWORD_LENGTH) {
       errors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
@@ -153,7 +157,7 @@ export default function SignUpScreen() {
               <Text style={styles.title} accessibilityRole="header">
                 Sign up
               </Text>
-              <Text style={styles.subtitle}>Use your school email. It only takes a minute.</Text>
+              <Text style={styles.subtitle}>Use your @{SCHOOL_EMAIL_DOMAIN} email. It only takes a minute.</Text>
             </View>
 
             {formError ? (
@@ -213,7 +217,7 @@ export default function SignUpScreen() {
                       if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
                     }}
                     error={fieldErrors.email}
-                    placeholder="you@school.edu"
+                    placeholder={SCHOOL_EMAIL_EXAMPLE}
                     autoCapitalize="none"
                     autoCorrect={false}
                     autoComplete="email"
