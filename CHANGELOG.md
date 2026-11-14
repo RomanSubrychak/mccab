@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `POST /auth/register` sign-up endpoint on the server: bcrypt password hashing, a 7-day JWT, a zxcvbn password strength check, and an optional `ALLOWED_EMAIL_DOMAIN` restriction. Adds a required `passwordHash` column to `User`, so run `npx prisma migrate deploy` and `npx prisma generate`, and add `ALLOWED_EMAIL_DOMAIN` to `server/.env` after pulling. If your local `User` table has rows, delete them first or the migration fails.
 - Email verification on sign up: a 6-digit code is emailed right after registration, expires after 15 minutes and can be re-sent. New endpoints `POST /auth/verify-email` and `POST /auth/resend-verification`, and a verify email screen in the app. In `server/`, run `npm install`, `npx prisma migrate deploy` and `npx prisma generate` after pulling. Accounts that already exist count as unverified.
 - After entering the code, the app signs the student in and continues to the Terms and Conditions and the role choice. Signing in to an unverified account opens the verify email screen, where a new code can be requested.
+- Signed-in routes (`requireAuth`) refuse unverified accounts with `401`, so anyone still signed in from before email verification existed is signed out and asked to verify.
 
 ### Changed
 

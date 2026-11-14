@@ -112,7 +112,7 @@ All requests and responses use JSON. CORS is enabled so the mobile app can call 
 
 ### Signed-in routes
 
-These need the login token in an `Authorization: Bearer <token>` header. A missing, expired or revoked token gets `401` with `{error}`. Tokens are revoked when the password is changed or reset, or the account is deleted. Validation errors are `400` with `{error, field}`, where `field` names the input to show the message under.
+These need the login token in an `Authorization: Bearer <token>` header. A missing, expired or revoked token gets `401` with `{error}`, and so does an account whose email isn't verified (with `code: "EMAIL_NOT_VERIFIED"`). Tokens are revoked when the password is changed or reset, or the account is deleted. Validation errors are `400` with `{error, field}`, where `field` names the input to show the message under.
 
 | Method | Path | Response |
 | --- | --- | --- |
