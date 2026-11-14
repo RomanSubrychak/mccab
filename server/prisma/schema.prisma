@@ -24,6 +24,16 @@ model User {
   passwordResets PasswordReset[]
   vehicle        Vehicle?
 
+  // Null until the user enters the code from their verification email.
+  // Unverified accounts are inactive: they can't sign in.
+  emailVerifiedAt DateTime?
+
+  // The current code. Cleared once the email is verified.
+  verificationCodeHash      String?
+  verificationCodeExpiresAt DateTime?
+  verificationCodeSentAt    DateTime?
+  verificationAttempts      Int       @default(0)
+
   // About me
   phone          String? // E.164, e.g. +13125550123
   bio            String?

@@ -76,6 +76,10 @@ export default function LoginScreen() {
       // choice or the tabs, depending on how far the student got (see (app)/_layout.tsx).
       signIn(result.token);
     } catch (err) {
+      if (err instanceof ApiError && err.code === "EMAIL_NOT_VERIFIED") {
+        router.push({ pathname: "/verify-email", params: { email: trimmedEmail } });
+        return;
+      }
       setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
       setSubmitting(false);

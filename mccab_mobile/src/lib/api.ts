@@ -21,6 +21,12 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
+export type RegisterResponse = {
+  user: AuthUser;
+  // False when the account was created but the email couldn't be sent.
+  emailSent: boolean;
+};
+
 // Only the last 4 characters of the licence number are ever stored or shown.
 export type Licence = {
   state: string;
@@ -110,12 +116,15 @@ export class ApiError extends Error {
   readonly status?: number;
   // The form field the server blamed, e.g. "phone". Set for 400 responses that name one.
   readonly field?: string;
+  // Machine-readable reason from the server, for example "EMAIL_NOT_VERIFIED".
+  readonly code?: string;
 
-  constructor(message: string, status?: number, field?: string) {
+  constructor(message: string, status?: number, field?: string, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.field = field;
+    this.code = code;
   }
 }
 
@@ -165,6 +174,7 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
       data?.error ?? `Something went wrong (${response.status}). Try again.`,
       response.status,
       typeof data?.field === "string" ? data.field : undefined,
+      typeof data?.code === "string" ? data.code : undefined,
     );
   }
 
@@ -180,12 +190,32 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   });
 }
 
-export function register(name: string, email: string, password: string): Promise<LoginResponse> {
-  return request<LoginResponse>("/auth/register", {
+export function register(
+  name: string,
+  email: string,
+  password: string,
+): Promise<RegisterResponse> {
+  return request<RegisterResponse>("/auth/register", {
     method: "POST",
     body: { name, email, password },
     feature: "Sign up",
     byStatus: { 409: "An account with this email already exists." },
+  });
+}
+
+export function verifyEmail(email: string, code: string): Promise<LoginResponse> {
+  return request<LoginResponse>("/auth/verify-email", {
+    method: "POST",
+    body: { email, code },
+    feature: "Verification",
+  });
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await request<unknown>("/auth/resend-verification", {
+    method: "POST",
+    body: { email },
+    feature: "Verification",
   });
 }
 

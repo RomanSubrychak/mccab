@@ -31,6 +31,11 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | `DATABASE_URL` | `postgresql://postgres:<password>@localhost:5432/rideshare` | PostgreSQL connection string. The format depends on your OS; see the [main README](../README.md#server-setup). |
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Required: the server won't start without it. |
 | `ALLOWED_EMAIL_DOMAIN` | `mccollege.edu` | Only emails at exactly this domain can sign up (subdomains are refused). Login and password reset are not limited. If missing or empty, it defaults to `mccollege.edu`. Set it to `*` to allow any email for local testing; the server then logs a warning. |
+| `SMTP_HOST` | `smtp.gmail.com` | Mail server for verification codes. If empty, codes are printed in the server console instead (in production, sending fails). |
+| `SMTP_PORT` | `587` | Mail server port. Defaults to `587`. |
+| `SMTP_USER` | `you@gmail.com` | Mail server login. |
+| `SMTP_PASS` | `abcdefghijklmnop` | Mail server password. For Gmail, use an [app password](https://support.google.com/accounts/answer/185833), not your normal password. |
+| `EMAIL_FROM` | `you@gmail.com` | Sender shown on the email. Defaults to `SMTP_USER`. Use a plain address: school mail filters (Microsoft 365) dropped emails with a brand name like `MCCab <you@gmail.com>` on a personal Gmail. |
 
 ### Generating `JWT_SECRET`
 
@@ -94,16 +99,20 @@ server/
 | Method | Path | Response |
 | --- | --- | --- |
 | `GET` | `/health` | `{"status":"ok"}` |
-| `POST` | `/auth/register` | Body `{name, email, password}`. `201` with `{token, user}`, `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
-| `POST` | `/auth/login` | Body `{email, password}`. `200` with `{token, user}`. `400` with `{error}` when a field is missing. `401` with `{error}` for a wrong email or a wrong password (same message either way). |
+| `POST` | `/auth/register` | Body `{name, email, password}`. Creates an inactive account and emails a 6-digit code. `201` with `{user, emailSent}` (no token), `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
+| `POST` | `/auth/verify-email` | Body `{email, code}`. Activates the account. `200` with `{token, user}`, `400` with `{error}` for a wrong or expired code, `429` with `{error}` after 5 wrong attempts on one code. |
+| `POST` | `/auth/resend-verification` | Body `{email}`. Replaces the code with a new one. `200` with `{ok: true}`, also for unknown or already verified emails. `429` with `{error}` within 60 seconds of the last code, `502` with `{error}` if the email can't be sent. |
+| `POST` | `/auth/login` | Body `{email, password}`. `200` with `{token, user}`. `400` with `{error}` when a field is missing. `401` with `{error}` for a wrong email or a wrong password (same message either way). `403` with `{error, code: "EMAIL_NOT_VERIFIED"}` for the right password on an account whose email isn't verified yet. |
 | `POST` | `/auth/forgot-password` | Body `{email}`. `400` with `{error}` when the email is invalid. Otherwise `200` with `{ok: true}`, including when no account exists. If the account exists, the server prints a one-time code (valid for 15 minutes) in its terminal. No email is sent. |
 | `POST` | `/auth/reset-password` | Body `{token, password}`. `200` with `{ok: true}` after the password is updated. `400` with `{error}` when the code is missing, expired, or already used, or when the new password is too weak. |
+
+Verification codes expire after 15 minutes. Without `SMTP_HOST`, they're printed in the server terminal instead of emailed.
 
 All requests and responses use JSON. CORS is enabled so the mobile app can call the API.
 
 ### Signed-in routes
 
-These need the login token in an `Authorization: Bearer <token>` header. A missing, expired or revoked token gets `401` with `{error}`. Tokens are revoked when the password is changed or reset, or the account is deleted. Validation errors are `400` with `{error, field}`, where `field` names the input to show the message under.
+These need the login token in an `Authorization: Bearer <token>` header. A missing, expired or revoked token gets `401` with `{error}`, and so does an account whose email isn't verified (with `code: "EMAIL_NOT_VERIFIED"`). Tokens are revoked when the password is changed or reset, or the account is deleted. Validation errors are `400` with `{error, field}`, where `field` names the input to show the message under.
 
 | Method | Path | Response |
 | --- | --- | --- |
@@ -142,7 +151,7 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`RIDER_DRIVER`, `null` until the student picks one), `activeMode` (`RIDING`/`DRIVING`, what a `RIDER_DRIVER` is doing now), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `licenceState`, `licenceLast4`, `licenceExpiresOn`, `insuranceProvider`, `insurancePolicyLast4`, `insuranceExpiresOn` (only the last 4 characters of licence and policy numbers are stored), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews` |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`RIDER_DRIVER`, `null` until the student picks one), `activeMode` (`RIDING`/`DRIVING`, what a `RIDER_DRIVER` is doing now), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `licenceState`, `licenceLast4`, `licenceExpiresOn`, `insuranceProvider`, `insurancePolicyLast4`, `insuranceExpiresOn` (only the last 4 characters of licence and policy numbers are stored), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews`. Email verification: `emailVerifiedAt` (null until verified; unverified accounts can't sign in), `verificationCodeHash`, `verificationCodeExpiresAt`, `verificationCodeSentAt`, `verificationAttempts` |
 | `Vehicle` | `id`, `userId` (unique: one car per user), `make`, `model`, `year`, `color`, `plate`, `seats` (1 to 3), `createdAt`, `updatedAt`. Deleted when the user is deleted. |
 | `PasswordReset` | `id`, `userId`, `tokenHash` (unique SHA-256 of the reset code), `expiresAt`, `usedAt`, `createdAt`. Deleted when the user is deleted. |
 

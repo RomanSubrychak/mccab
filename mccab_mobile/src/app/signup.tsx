@@ -49,7 +49,6 @@ export default function SignUpScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [createdName, setCreatedName] = useState<string | null>(null);
 
   function goToLogin() {
     if (router.canGoBack()) {
@@ -109,8 +108,10 @@ export default function SignUpScreen() {
     setSubmitting(true);
     try {
       const result = await register(trimmedName, trimmedEmail, password);
-      // Token storage waits until there is a home screen to open.
-      setCreatedName(result.user.name);
+      router.replace({
+        pathname: "/verify-email",
+        params: { email: result.user.email, emailSent: result.emailSent ? "1" : "0" },
+      });
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setFieldErrors({ email: err.message });
@@ -174,148 +175,131 @@ export default function SignUpScreen() {
               </View>
             ) : null}
 
-            {createdName ? (
-              <>
-                <View style={styles.successBox} accessibilityLiveRegion="polite">
-                  <Text style={styles.successText}>Account created for {createdName}.</Text>
+            <View style={styles.form}>
+              <TextField
+                ref={nameRef}
+                label="Full name"
+                value={name}
+                onChangeText={(value) => {
+                  setName(value);
+                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                error={fieldErrors.name}
+                placeholder="Your name"
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => emailRef.current?.focus()}
+                editable={!submitting}
+              />
+
+              <TextField
+                ref={emailRef}
+                label="School email"
+                value={email}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                error={fieldErrors.email}
+                placeholder={SCHOOL_EMAIL_EXAMPLE}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                editable={!submitting}
+              />
+
+              <TextField
+                ref={passwordRef}
+                label="Password"
+                password
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
+                error={fieldErrors.password}
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Longer phrases work best.`}
+                placeholder="Create a password"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => confirmRef.current?.focus()}
+                editable={!submitting}
+              />
+
+              <TextField
+                ref={confirmRef}
+                label="Confirm password"
+                password
+                value={confirmPassword}
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  if (fieldErrors.confirmPassword) {
+                    setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                  }
+                }}
+                error={fieldErrors.confirmPassword}
+                placeholder="Repeat your password"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="go"
+                onSubmitEditing={handleSubmit}
+                editable={!submitting}
+              />
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.button,
+                pressed && styles.buttonPressed,
+                submitting && styles.buttonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityLabel={submitting ? "Creating account" : "Create account"}
+              accessibilityState={{ disabled: submitting, busy: submitting }}
+            >
+              {submitting ? (
+                <View style={local.buttonBusy}>
+                  <ActivityIndicator color={colors.onPrimary} size="small" />
+                  <Text style={styles.buttonText}>Creating account…</Text>
                 </View>
-                <Pressable
-                  style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-                  onPress={goToLogin}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.buttonText}>Sign in</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <View style={styles.form}>
-                  <TextField
-                    ref={nameRef}
-                    label="Full name"
-                    value={name}
-                    onChangeText={(value) => {
-                      setName(value);
-                      if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
-                    }}
-                    error={fieldErrors.name}
-                    placeholder="Your name"
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    textContentType="name"
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    onSubmitEditing={() => emailRef.current?.focus()}
-                    editable={!submitting}
-                  />
+              ) : (
+                <Text style={styles.buttonText}>Create account</Text>
+              )}
+            </Pressable>
 
-                  <TextField
-                    ref={emailRef}
-                    label="School email"
-                    value={email}
-                    onChangeText={(value) => {
-                      setEmail(value);
-                      if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                    }}
-                    error={fieldErrors.email}
-                    placeholder={SCHOOL_EMAIL_EXAMPLE}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                    editable={!submitting}
-                  />
+            <View style={styles.divider} />
 
-                  <TextField
-                    ref={passwordRef}
-                    label="Password"
-                    password
-                    value={password}
-                    onChangeText={(value) => {
-                      setPassword(value);
-                      if (fieldErrors.password) {
-                        setFieldErrors((prev) => ({ ...prev, password: undefined }));
-                      }
-                    }}
-                    error={fieldErrors.password}
-                    hint={`At least ${MIN_PASSWORD_LENGTH} characters. Longer phrases work best.`}
-                    placeholder="Create a password"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="new-password"
-                    textContentType="newPassword"
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    onSubmitEditing={() => confirmRef.current?.focus()}
-                    editable={!submitting}
-                  />
-
-                  <TextField
-                    ref={confirmRef}
-                    label="Confirm password"
-                    password
-                    value={confirmPassword}
-                    onChangeText={(value) => {
-                      setConfirmPassword(value);
-                      if (fieldErrors.confirmPassword) {
-                        setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
-                      }
-                    }}
-                    error={fieldErrors.confirmPassword}
-                    placeholder="Repeat your password"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoComplete="new-password"
-                    textContentType="newPassword"
-                    returnKeyType="go"
-                    onSubmitEditing={handleSubmit}
-                    editable={!submitting}
-                  />
-                </View>
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.button,
-                    pressed && styles.buttonPressed,
-                    submitting && styles.buttonDisabled,
-                  ]}
-                  onPress={handleSubmit}
-                  disabled={submitting}
-                  accessibilityRole="button"
-                  accessibilityLabel={submitting ? "Creating account" : "Create account"}
-                  accessibilityState={{ disabled: submitting, busy: submitting }}
-                >
-                  {submitting ? (
-                    <View style={local.buttonBusy}>
-                      <ActivityIndicator color={colors.onPrimary} size="small" />
-                      <Text style={styles.buttonText}>Creating account…</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.buttonText}>Create account</Text>
-                  )}
-                </Pressable>
-
-                <View style={styles.divider} />
-
-                <View style={[styles.footer, styles.footerInCard]}>
-                  <Text style={styles.footerText}>Already have an account?</Text>
-                  <Pressable
-                    style={styles.footerLinkHit}
-                    onPress={goToLogin}
-                    accessibilityRole="link"
-                    disabled={submitting}
-                  >
-                    {({ pressed }) => (
-                      <Text style={[styles.footerLink, pressed && styles.linkPressed]}>Sign in</Text>
-                    )}
-                  </Pressable>
-                </View>
-              </>
-            )}
+            <View style={[styles.footer, styles.footerInCard]}>
+              <Text style={styles.footerText}>Already have an account?</Text>
+              <Pressable
+                style={styles.footerLinkHit}
+                onPress={goToLogin}
+                accessibilityRole="link"
+                disabled={submitting}
+              >
+                {({ pressed }) => (
+                  <Text style={[styles.footerLink, pressed && styles.linkPressed]}>Sign in</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
