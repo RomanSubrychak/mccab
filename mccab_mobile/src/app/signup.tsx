@@ -13,7 +13,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useThemeColors } from "@/constants/theme";
-import { ApiError, register, type AuthUser } from "@/lib/api";
+import { ApiError, register } from "@/lib/api";
 import { createAuthStyles } from "@/styles/auth";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,7 +30,6 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
 
   function goToLogin() {
     if (router.canGoBack()) {
@@ -65,8 +64,10 @@ export default function SignUpScreen() {
     setSubmitting(true);
     try {
       const result = await register(trimmedName, trimmedEmail, password);
-      // TODO: store result.token securely and navigate to the home screen.
-      setUser(result.user);
+      router.replace({
+        pathname: "/verify-email",
+        params: { email: result.user.email, emailSent: result.emailSent ? "1" : "0" },
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
@@ -184,10 +185,6 @@ export default function SignUpScreen() {
               <View style={styles.errorBox} accessibilityRole="alert">
                 <Text style={styles.errorText}>{error}</Text>
               </View>
-            ) : null}
-
-            {user ? (
-              <Text style={styles.successText}>Account created for {user.name}.</Text>
             ) : null}
 
             <Pressable

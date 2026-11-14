@@ -17,4 +17,14 @@ model User {
   email        String @unique
   name         String
   passwordHash String
+
+  // Null until the user enters the code from their verification email.
+  // Unverified accounts are inactive: they can't sign in.
+  emailVerifiedAt DateTime?
+
+  // The current code. Cleared once the email is verified.
+  verificationCodeHash      String?
+  verificationCodeExpiresAt DateTime?
+  verificationCodeSentAt    DateTime?
+  verificationAttempts      Int       @default(0)
 }

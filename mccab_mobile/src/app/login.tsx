@@ -73,6 +73,10 @@ export default function LoginScreen() {
       // TODO: store result.token securely and navigate to the home screen.
       setUser(result.user);
     } catch (err) {
+      if (err instanceof ApiError && err.code === "EMAIL_NOT_VERIFIED") {
+        router.push({ pathname: "/verify-email", params: { email: trimmedEmail } });
+        return;
+      }
       setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {
       setSubmitting(false);

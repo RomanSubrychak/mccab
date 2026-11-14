@@ -11,7 +11,21 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
-export class ApiError extends Error {}
+export type RegisterResponse = {
+  user: AuthUser;
+  // False when the account was created but the email couldn't be sent.
+  emailSent: boolean;
+};
+
+export class ApiError extends Error {
+  // Machine-readable reason from the server, for example "EMAIL_NOT_VERIFIED".
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
 
 type ErrorMessages = {
   // Message to show for specific HTTP status codes.
@@ -46,7 +60,10 @@ async function postJson<T>(path: string, body: unknown, messages: ErrorMessages)
     if (response.status === 404) {
       throw new ApiError(`${messages.feature} isn't available on the server yet.`);
     }
-    throw new ApiError(data?.error ?? `Something went wrong (${response.status}). Try again.`);
+    throw new ApiError(
+      data?.error ?? `Something went wrong (${response.status}). Try again.`,
+      data?.code,
+    );
   }
 
   return data as T;
@@ -60,12 +77,24 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   );
 }
 
-export function register(name: string, email: string, password: string): Promise<LoginResponse> {
-  return postJson<LoginResponse>(
+export function register(
+  name: string,
+  email: string,
+  password: string,
+): Promise<RegisterResponse> {
+  return postJson<RegisterResponse>(
     "/auth/register",
     { name, email, password },
     { feature: "Sign up", byStatus: { 409: "An account with this email already exists." } },
   );
+}
+
+export function verifyEmail(email: string, code: string): Promise<LoginResponse> {
+  return postJson<LoginResponse>("/auth/verify-email", { email, code }, { feature: "Verification" });
+}
+
+export async function resendVerification(email: string): Promise<void> {
+  await postJson<unknown>("/auth/resend-verification", { email }, { feature: "Verification" });
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

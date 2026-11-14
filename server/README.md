@@ -31,6 +31,11 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | `DATABASE_URL` | `postgresql://postgres:<password>@localhost:5432/rideshare` | PostgreSQL connection string. The format depends on your OS; see the [main README](../README.md#server-setup). |
 | `JWT_SECRET` | `change-me` | Secret used to sign login tokens. Required: the server won't start without it. |
 | `ALLOWED_EMAIL_DOMAIN` | `school.edu` | Only emails at this domain can sign up. If empty, any email can sign up and the server logs a warning. |
+| `SMTP_HOST` | `smtp.gmail.com` | Mail server for verification codes. If empty, codes are printed in the server console instead (in production, sending fails). |
+| `SMTP_PORT` | `587` | Mail server port. Defaults to `587`. |
+| `SMTP_USER` | `you@gmail.com` | Mail server login. |
+| `SMTP_PASS` | `abcdefghijklmnop` | Mail server password. For Gmail, use an [app password](https://support.google.com/accounts/answer/185833), not your normal password. |
+| `EMAIL_FROM` | `you@gmail.com` | Sender shown on the email. Defaults to `SMTP_USER`. Use a plain address: school mail filters (Microsoft 365) dropped emails with a brand name like `MCCab <you@gmail.com>` on a personal Gmail. |
 
 ### Generating `JWT_SECRET`
 
@@ -90,11 +95,16 @@ server/
 | Method | Path | Response |
 | --- | --- | --- |
 | `GET` | `/health` | `{"status":"ok"}` |
-| `POST` | `/auth/register` | Body `{name, email, password}`. `201` with `{token, user}`, `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
+| `POST` | `/auth/register` | Body `{name, email, password}`. Creates an inactive account and emails a 6-digit code. `201` with `{user, emailSent}` (no token), `400` with `{error}` for invalid input or a weak password (8 characters minimum, zxcvbn score of 3 or higher), `409` with `{error}` if the email is taken. |
+| `POST` | `/auth/verify-email` | Body `{email, code}`. Activates the account. `200` with `{token, user}`, `400` with `{error}` for a wrong or expired code, `429` with `{error}` after 5 wrong attempts on one code. |
+| `POST` | `/auth/resend-verification` | Body `{email}`. Replaces the code with a new one. `200` with `{ok: true}`, also for unknown or already verified emails. `429` with `{error}` within 60 seconds of the last code, `502` with `{error}` if the email can't be sent. |
+| `POST` | `/auth/login` | Body `{email, password}`. `200` with `{token, user}`, `401` with `{error}` for wrong credentials, `403` with `{error, code: "EMAIL_NOT_VERIFIED"}` if the email isn't verified. |
+
+Verification codes expire after 15 minutes.
 
 All requests and responses use JSON. CORS is enabled so the mobile app can call the API.
 
-Login, password reset, ride and booking endpoints are not built yet. When you add a route, add it to this table.
+Password reset, ride and booking endpoints are not built yet. When you add a route, add it to this table.
 
 ### Using the database in a route
 
@@ -115,7 +125,7 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API) |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `emailVerifiedAt` (null until verified), `verificationCodeHash`, `verificationCodeExpiresAt`, `verificationCodeSentAt`, `verificationAttempts` |
 
 To change the schema:
 
