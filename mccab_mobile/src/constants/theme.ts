@@ -1,6 +1,10 @@
 import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
 import { Platform, useColorScheme } from "react-native";
 
+import { getStorageItemAsync, setStorageItemAsync } from "@/lib/storage";
+
+const THEME_KEY = "mccab.theme";
+
 const palette = {
   light: {
     background: "#F4F7FB",
@@ -44,7 +48,7 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-// TODO: persist the preference (e.g. with AsyncStorage) so it survives app restarts.
+// The preference is saved, so it survives app restarts.
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const colorScheme = useColorScheme();
   const isHydrated = useIsHydrated();
@@ -52,7 +56,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // color scheme and renders light. Use light until hydration finishes so the
   // first client render matches the server HTML, then switch to the real scheme.
   const systemScheme = isHydrated && colorScheme === "dark" ? "dark" : "light";
-  const [preference, setPreference] = useState<ThemePreference>("system");
+  const [preference, setPreferenceState] = useState<ThemePreference>("system");
+
+  useEffect(() => {
+    getStorageItemAsync(THEME_KEY).then((saved) => {
+      if (saved === "light" || saved === "dark" || saved === "system") {
+        setPreferenceState(saved);
+      }
+    });
+  }, []);
+
+  const setPreference = (next: ThemePreference) => {
+    setPreferenceState(next);
+    setStorageItemAsync(THEME_KEY, next);
+  };
 
   const scheme: ColorScheme = preference === "system" ? systemScheme : preference;
 

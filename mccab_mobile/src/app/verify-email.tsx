@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { TextField } from "@/components/text-field";
 import { useThemeColors } from "@/constants/theme";
 import { ApiError, resendVerification, verifyEmail } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { createAuthStyles } from "@/styles/auth";
 
 const CODE_LENGTH = 6;
@@ -23,6 +24,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
 export default function VerifyEmailScreen() {
   const colors = useThemeColors();
   const styles = createAuthStyles(colors);
+  const { signIn } = useSession();
 
   // The sign up screen sets emailSent to "1" or "0". The login screen leaves it
   // out: that user may have no valid code, so they can resend right away.
@@ -59,9 +61,10 @@ export default function VerifyEmailScreen() {
     setNotice(null);
     setSubmitting(true);
     try {
-      await verifyEmail(email, code);
-      // TODO: store the returned token securely.
-      router.replace("/role-selection");
+      const result = await verifyEmail(email, code);
+      // Saving the token signs the student in and switches to the signed-in
+      // screens: the terms, then the role choice (see (app)/_layout.tsx).
+      signIn(result.token);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
     } finally {

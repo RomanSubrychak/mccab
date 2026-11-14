@@ -1,35 +1,54 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
-  TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
 import { router } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useThemeColors } from "@/constants/theme";
+import { TextField } from "@/components/text-field";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { SCHOOL_EMAIL_DOMAIN, SCHOOL_EMAIL_EXAMPLE, isSchoolEmail } from "@/constants/school";
+import { useThemeColors, type Colors } from "@/constants/theme";
 import { ApiError, register } from "@/lib/api";
 import { createAuthStyles } from "@/styles/auth";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 72;
+
+type FieldErrors = {
+  name?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+};
 
 export default function SignUpScreen() {
   const colors = useThemeColors();
   const styles = createAuthStyles(colors);
+  const local = createLocalStyles(colors);
+  const insets = useSafeAreaInsets();
+
+  const nameRef = useRef<TextInputInstance>(null);
+  const emailRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   function goToLogin() {
     if (router.canGoBack()) {
@@ -39,28 +58,53 @@ export default function SignUpScreen() {
     }
   }
 
-  async function handleSubmit() {
-    const trimmedName = name.trim();
-    const trimmedEmail = email.trim().toLowerCase();
-
+  function validate(trimmedName: string, trimmedEmail: string): FieldErrors {
+    const errors: FieldErrors = {};
     if (trimmedName.length === 0) {
-      setError("Enter your name.");
-      return;
+      errors.name = "Enter your name.";
     }
-    if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setError("Enter a valid email address.");
-      return;
+    if (trimmedEmail.length === 0) {
+      errors.email = "Enter your school email.";
+    } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      errors.email = `Enter a valid email address, like ${SCHOOL_EMAIL_EXAMPLE}.`;
+    } else if (!isSchoolEmail(trimmedEmail)) {
+      // Same message as the server, which checks this too. It doesn't name the
+      // allowed domain on purpose.
+      errors.email = "Use your school email address.";
     }
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
+      errors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+    } else if (password.length > MAX_PASSWORD_LENGTH) {
+      errors.password = `Password must be at most ${MAX_PASSWORD_LENGTH} characters.`;
     }
-    if (password !== confirmPassword) {
-      setError("Passwords don't match.");
+    if (confirmPassword.length === 0) {
+      errors.confirmPassword = "Repeat your password.";
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = "Passwords don't match.";
+    }
+    return errors;
+  }
+
+  function focusFirstError(errors: FieldErrors) {
+    if (errors.name) nameRef.current?.focus();
+    else if (errors.email) emailRef.current?.focus();
+    else if (errors.password) passwordRef.current?.focus();
+    else if (errors.confirmPassword) confirmRef.current?.focus();
+  }
+
+  async function handleSubmit() {
+    if (submitting) return;
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim().toLowerCase();
+    const errors = validate(trimmedName, trimmedEmail);
+    setFieldErrors(errors);
+    setFormError(null);
+    if (Object.keys(errors).length > 0) {
+      focusFirstError(errors);
       return;
     }
 
-    setError(null);
     setSubmitting(true);
     try {
       const result = await register(trimmedName, trimmedEmail, password);
@@ -69,7 +113,18 @@ export default function SignUpScreen() {
         params: { email: result.user.email, emailSent: result.emailSent ? "1" : "0" },
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+      if (err instanceof ApiError && err.status === 409) {
+        setFieldErrors({ email: err.message });
+        emailRef.current?.focus();
+      } else if (err instanceof ApiError && isPasswordProblem(err.message)) {
+        setFieldErrors({ password: err.message });
+        passwordRef.current?.focus();
+      } else if (err instanceof ApiError && isEmailProblem(err.message)) {
+        setFieldErrors({ email: err.message });
+        emailRef.current?.focus();
+      } else {
+        setFormError(err instanceof ApiError ? err.message : "Something went wrong. Try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -77,6 +132,10 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={[local.topBar, { top: insets.top + 12 }]}>
+        <ThemeToggle />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -89,88 +148,111 @@ export default function SignUpScreen() {
             <View style={styles.logo}>
               <Text style={styles.logoText}>M</Text>
             </View>
-            <Text style={styles.appName}>MCCab</Text>
+            <Text style={styles.appName} accessibilityRole="header">
+              MCCab
+            </Text>
             <Text style={styles.tagline}>Create an account to start sharing rides</Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.title}>Sign up</Text>
+            <View style={styles.cardHeader}>
+              <Text style={styles.title} accessibilityRole="header">
+                Sign up
+              </Text>
+              <Text style={styles.subtitle}>Use your @{SCHOOL_EMAIL_DOMAIN} email. It only takes a minute.</Text>
+            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Full name</Text>
-              <TextInput
-                style={styles.input}
+            {formError ? (
+              <View
+                style={styles.errorBox}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+              >
+                <View style={local.errorIcon}>
+                  <Text style={local.errorIconText}>!</Text>
+                </View>
+                <Text style={styles.errorText}>{formError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.form}>
+              <TextField
+                ref={nameRef}
+                label="Full name"
                 value={name}
-                onChangeText={setName}
+                onChangeText={(value) => {
+                  setName(value);
+                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                error={fieldErrors.name}
                 placeholder="Your name"
-                placeholderTextColor={colors.textMuted}
                 autoCapitalize="words"
                 autoComplete="name"
                 textContentType="name"
                 returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => emailRef.current?.focus()}
                 editable={!submitting}
               />
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>School email</Text>
-              <TextInput
-                style={styles.input}
+              <TextField
+                ref={emailRef}
+                label="School email"
                 value={email}
-                onChangeText={setEmail}
-                placeholder="you@school.edu"
-                placeholderTextColor={colors.textMuted}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+                error={fieldErrors.email}
+                placeholder={SCHOOL_EMAIL_EXAMPLE}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
                 keyboardType="email-address"
                 textContentType="emailAddress"
                 returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => passwordRef.current?.focus()}
                 editable={!submitting}
               />
-            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordRow}>
-                <TextInput
-                  style={[styles.input, styles.passwordInput]}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Create a password"
-                  placeholderTextColor={colors.textMuted}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  textContentType="newPassword"
-                  returnKeyType="next"
-                  editable={!submitting}
-                />
-                <Pressable
-                  style={styles.showButton}
-                  onPress={() => setShowPassword((value) => !value)}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-                  hitSlop={8}
-                >
-                  <Text style={styles.showButtonText}>{showPassword ? "Hide" : "Show"}</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.hint}>
-                At least {MIN_PASSWORD_LENGTH} characters. Longer phrases work best.
-              </Text>
-            </View>
+              <TextField
+                ref={passwordRef}
+                label="Password"
+                password
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
+                error={fieldErrors.password}
+                hint={`At least ${MIN_PASSWORD_LENGTH} characters. Longer phrases work best.`}
+                placeholder="Create a password"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => confirmRef.current?.focus()}
+                editable={!submitting}
+              />
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Confirm password</Text>
-              <TextInput
-                style={styles.input}
+              <TextField
+                ref={confirmRef}
+                label="Confirm password"
+                password
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  if (fieldErrors.confirmPassword) {
+                    setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                  }
+                }}
+                error={fieldErrors.confirmPassword}
                 placeholder="Repeat your password"
-                placeholderTextColor={colors.textMuted}
-                secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="new-password"
@@ -181,12 +263,6 @@ export default function SignUpScreen() {
               />
             </View>
 
-            {error ? (
-              <View style={styles.errorBox} accessibilityRole="alert">
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
             <Pressable
               style={({ pressed }) => [
                 styles.button,
@@ -196,29 +272,74 @@ export default function SignUpScreen() {
               onPress={handleSubmit}
               disabled={submitting}
               accessibilityRole="button"
+              accessibilityLabel={submitting ? "Creating account" : "Create account"}
               accessibilityState={{ disabled: submitting, busy: submitting }}
             >
               {submitting ? (
-                <ActivityIndicator color={colors.onPrimary} />
+                <View style={local.buttonBusy}>
+                  <ActivityIndicator color={colors.onPrimary} size="small" />
+                  <Text style={styles.buttonText}>Creating account…</Text>
+                </View>
               ) : (
                 <Text style={styles.buttonText}>Create account</Text>
               )}
             </Pressable>
-          </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?</Text>
-            <Pressable
-              onPress={goToLogin}
-              accessibilityRole="link"
-              hitSlop={8}
-              disabled={submitting}
-            >
-              <Text style={styles.footerLink}>Sign in</Text>
-            </Pressable>
+            <View style={styles.divider} />
+
+            <View style={[styles.footer, styles.footerInCard]}>
+              <Text style={styles.footerText}>Already have an account?</Text>
+              <Pressable
+                style={styles.footerLinkHit}
+                onPress={goToLogin}
+                accessibilityRole="link"
+                disabled={submitting}
+              >
+                {({ pressed }) => (
+                  <Text style={[styles.footerLink, pressed && styles.linkPressed]}>Sign in</Text>
+                )}
+              </Pressable>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+function isPasswordProblem(message: string): boolean {
+  return /password|guess/i.test(message);
+}
+
+function isEmailProblem(message: string): boolean {
+  return /email/i.test(message);
+}
+
+function createLocalStyles(colors: Colors) {
+  return StyleSheet.create({
+    topBar: {
+      position: "absolute",
+      right: 16,
+      zIndex: 1,
+    },
+    errorIcon: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: colors.error,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    errorIconText: {
+      color: colors.errorBackground,
+      fontSize: 14,
+      fontWeight: "800",
+      lineHeight: 16,
+    },
+    buttonBusy: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+  });
 }

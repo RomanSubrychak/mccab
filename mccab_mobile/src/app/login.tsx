@@ -15,8 +15,10 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { TextField } from "@/components/text-field";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SCHOOL_EMAIL_EXAMPLE } from "@/constants/school";
 import { useThemeColors, type Colors } from "@/constants/theme";
-import { ApiError, login, type AuthUser } from "@/lib/api";
+import { ApiError, login } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { createAuthStyles } from "@/styles/auth";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,6 +33,7 @@ export default function LoginScreen() {
   const styles = createAuthStyles(colors);
   const local = createLocalStyles(colors);
   const insets = useSafeAreaInsets();
+  const { signIn } = useSession();
 
   const passwordRef = useRef<TextInputInstance>(null);
 
@@ -39,14 +42,13 @@ export default function LoginScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [user, setUser] = useState<AuthUser | null>(null);
 
   function validate(trimmedEmail: string): FieldErrors {
     const errors: FieldErrors = {};
     if (trimmedEmail.length === 0) {
       errors.email = "Enter your school email.";
     } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      errors.email = "Enter a valid email address, like you@school.edu.";
+      errors.email = `Enter a valid email address, like ${SCHOOL_EMAIL_EXAMPLE}.`;
     }
     if (password.length === 0) {
       errors.password = "Enter your password.";
@@ -70,8 +72,9 @@ export default function LoginScreen() {
     setSubmitting(true);
     try {
       const result = await login(trimmedEmail, password);
-      // TODO: store result.token securely and navigate to the home screen.
-      setUser(result.user);
+      // Saving the token switches to the signed-in screens: the terms, the role
+      // choice or the tabs, depending on how far the student got (see (app)/_layout.tsx).
+      signIn(result.token);
     } catch (err) {
       if (err instanceof ApiError && err.code === "EMAIL_NOT_VERIFIED") {
         router.push({ pathname: "/verify-email", params: { email: trimmedEmail } });
@@ -132,11 +135,6 @@ export default function LoginScreen() {
               </View>
             ) : null}
 
-            {user ? (
-              <View style={styles.successBox} accessibilityLiveRegion="polite">
-                <Text style={styles.successText}>Signed in as {user.name}.</Text>
-              </View>
-            ) : null}
 
             <View style={styles.form}>
               <TextField
@@ -147,7 +145,7 @@ export default function LoginScreen() {
                   if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
                 }}
                 error={fieldErrors.email}
-                placeholder="you@school.edu"
+                placeholder={SCHOOL_EMAIL_EXAMPLE}
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
