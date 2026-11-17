@@ -134,6 +134,65 @@ export type AddressSuggestion = {
 
 export type VehicleInput = Vehicle;
 
+// ---- Rides (see server/README.md, "Rides and bookings") ----
+
+export type RideDirection = "TO_CAMPUS" | "FROM_CAMPUS";
+export type RideStatus = "OPEN" | "CANCELLED" | "COMPLETED";
+export type BookingStatus = "REQUESTED" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+
+// A ride as the signed-in student may see it. Contact details are null until
+// the driver accepts, and again a day after the ride.
+export type Ride = {
+  id: number;
+  campus: Campus;
+  direction: RideDirection;
+  departAt: string; // ISO, UTC
+  seatsOffered: number;
+  seatsLeft: number;
+  pricePerSeatCents: number;
+  // The off-campus end of the trip (the driver's neighbourhood or city).
+  startArea: string;
+  notes: string | null;
+  status: RideStatus;
+  // From the student's home, rounded to 0.5 km. null without a home address or on your own ride.
+  distanceKm: number | null;
+  isMine: boolean;
+  driver: {
+    id: number;
+    firstName: string;
+    phone: string | null;
+    vehicle: Pick<Vehicle, "make" | "model" | "color" | "plate"> | null;
+  };
+  myBooking: { id: number; status: BookingStatus } | null;
+  // Only on your own rides.
+  bookings: RideBooking[] | null;
+};
+
+export type RideBooking = {
+  id: number;
+  status: BookingStatus;
+  createdAt: string;
+  rider: {
+    id: number;
+    firstName: string;
+    area: string | null;
+    phone: string | null;
+    pickupAddress: string | null;
+  };
+};
+
+export type NewRide = {
+  direction: RideDirection;
+  // ISO with the Chicago offset, e.g. "2026-11-20T07:30:00-06:00".
+  departAt: string;
+  campus: Campus;
+  seats: number;
+  pricePerSeatCents: number;
+  notes: string;
+};
+
+export type RideSearch = { campus?: Campus; direction?: RideDirection; date?: string };
+
 export class ApiError extends Error {
   readonly status?: number;
   // The form field the server blamed, e.g. "phone". Set for 400 responses that name one.
@@ -357,6 +416,66 @@ export async function removeVehicle(token: string): Promise<Profile> {
     feature: "My car",
   });
   return data.profile;
+}
+
+// A ride (or booking) is gone when its driver (or rider) deleted their account.
+const RIDE_GONE = "This ride doesn't exist anymore.";
+
+export async function postRide(token: string, ride: NewRide): Promise<Ride> {
+  const data = await request<{ ride: Ride }>("/rides", {
+    method: "POST",
+    body: ride,
+    token,
+    feature: "Rides",
+  });
+  return data.ride;
+}
+
+export async function searchRides(token: string, search: RideSearch): Promise<Ride[]> {
+  const query = Object.entries(search)
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join("&");
+  const data = await request<{ rides: Ride[] }>(`/rides${query ? `?${query}` : ""}`, {
+    token,
+    feature: "Rides",
+  });
+  return data.rides;
+}
+
+export async function getRide(token: string, id: number): Promise<Ride> {
+  const data = await request<{ ride: Ride }>(`/rides/${id}`, {
+    token,
+    feature: "Rides",
+    byStatus: { 404: RIDE_GONE },
+  });
+  return data.ride;
+}
+
+export async function getMyRides(token: string): Promise<{ driving: Ride[]; riding: Ride[] }> {
+  return request<{ driving: Ride[]; riding: Ride[] }>("/me/rides", { token, feature: "Rides" });
+}
+
+// The ride actions all answer with the ride as it is now.
+export type RideAction =
+  | { type: "cancelRide"; rideId: number }
+  | { type: "request"; rideId: number }
+  | { type: "accept" | "decline" | "cancelBooking"; bookingId: number };
+
+export async function rideAction(token: string, action: RideAction): Promise<Ride> {
+  const path =
+    action.type === "cancelRide"
+      ? `/rides/${action.rideId}/cancel`
+      : action.type === "request"
+        ? `/rides/${action.rideId}/bookings`
+        : `/bookings/${action.bookingId}/${action.type === "cancelBooking" ? "cancel" : action.type}`;
+  const data = await request<{ ride: Ride }>(path, {
+    method: "POST",
+    token,
+    feature: "Rides",
+    byStatus: { 404: RIDE_GONE },
+  });
+  return data.ride;
 }
 
 // Returns a new login token: changing the password signs out every other device.
