@@ -18,7 +18,7 @@ export function missingProfileItems(profile: Profile): ChecklistItem[] {
   const items: ChecklistItem[] = [];
   if (!profile.phone) items.push({ label: "Add your phone number", href: "/settings/about" });
   if (!profile.campus) items.push({ label: "Choose your campus", href: "/settings/route" });
-  if (!profile.homeArea) items.push({ label: "Add your home area", href: "/settings/route" });
+  if (!profile.homeAddress) items.push({ label: "Add your home address", href: "/settings/route" });
   if (isDriver(profile.rideRole)) {
     if (!profile.insurance) {
       items.push({ label: "Add your insurance", href: "/settings/insurance" });

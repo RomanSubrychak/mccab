@@ -48,11 +48,18 @@ model User {
   termsAcceptedAt DateTime?
 
   // My route
-  campus   Campus?
-  homeArea String? // Neighbourhood or area, never a full street address
-  rideDays Weekday[]
-  arriveBy String? // "HH:MM", 24-hour
-  leaveAt  String? // "HH:MM", 24-hour
+  campus      Campus?
+  // Public: neighbourhood or city, never a street address. Safe to show other
+  // students. Set from the home address (see lib/places.ts).
+  homeArea    String?
+  // Private: the exact home address and its coordinates. Only the student sees
+  // them; they're for matching and, later, a pickup point after a ride is confirmed.
+  homeAddress String?
+  homeLat     Float?
+  homeLng     Float?
+  rideDays    Weekday[]
+  arriveBy    String? // "HH:MM", 24-hour
+  leaveAt     String? // "HH:MM", 24-hour
 
   // Ride preferences
   pricePerSeatCents Int? // Drivers only

@@ -63,7 +63,10 @@ export type Profile = AuthUser & {
   // When the student agreed to the Terms and Conditions, or null.
   termsAcceptedAt: string | null;
   campus: Campus | null;
+  // Neighbourhood or city from the home address. Other students may see this.
   homeArea: string | null;
+  // The full home address. Private: only the student sees it.
+  homeAddress: string | null;
   rideDays: Weekday[];
   arriveBy: string | null;
   leaveAt: string | null;
@@ -98,6 +101,8 @@ export type ProfileChanges = Partial<
     | "email"
     | "createdAt"
     | "termsAcceptedAt"
+    | "homeArea"
+    | "homeAddress"
     | "vehicle"
     | "licence"
     | "insurance"
@@ -108,6 +113,23 @@ export type ProfileChanges = Partial<
 > & {
   // A role can be chosen or changed, but not cleared.
   rideRole?: RideRole;
+  // The token of an AddressSuggestion, or null to remove the home address.
+  // The server sets homeAddress and homeArea from it.
+  homePlace?: string | null;
+};
+
+// One result from searchAddresses.
+export type AddressSuggestion = {
+  // Street and number, e.g. "1234 West 18th Street".
+  title: string;
+  // City, state and ZIP, e.g. "Chicago, IL 60608".
+  subtitle: string;
+  // The full address, as it will be saved.
+  address: string;
+  // What other students would see, e.g. "Pilsen, Chicago".
+  area: string;
+  // Send this to updateProfile as homePlace to save the address.
+  token: string;
 };
 
 export type VehicleInput = Vehicle;
@@ -137,6 +159,8 @@ type RequestOptions = {
   byStatus?: Record<number, string>;
   // Feature name used when the server doesn't have the endpoint yet (404).
   feature: string;
+  // Cancels the request. A cancelled request rejects with the fetch AbortError.
+  signal?: AbortSignal;
 };
 
 async function request<T>(path: string, options: RequestOptions): Promise<T> {
@@ -154,8 +178,11 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
       method: options.method ?? "GET",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: options.signal,
     });
-  } catch {
+  } catch (err) {
+    // Cancelled on purpose (e.g. the user kept typing): not a connection problem.
+    if (options.signal?.aborted) throw err;
     throw new ApiError("Can't reach the server. Check your connection and try again.");
   }
 
@@ -250,6 +277,20 @@ export async function updateProfile(token: string, changes: ProfileChanges): Pro
     feature: "Profile",
   });
   return data.profile;
+}
+
+// Up to 5 addresses matching what the student typed, nearest to Chicago first.
+// Text under 3 characters returns an empty list.
+export async function searchAddresses(
+  token: string,
+  text: string,
+  signal?: AbortSignal,
+): Promise<AddressSuggestion[]> {
+  const data = await request<{ suggestions: AddressSuggestion[] }>(
+    `/places/autocomplete?text=${encodeURIComponent(text)}`,
+    { token, signal, feature: "Address search" },
+  );
+  return data.suggestions;
 }
 
 export async function acceptTerms(token: string): Promise<Profile> {
