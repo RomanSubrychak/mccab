@@ -6,6 +6,7 @@ import cors from "cors";
 import { authRoutes } from "./routes/auth";
 import { meRoutes } from "./routes/me";
 import { placesRoutes } from "./routes/places";
+import { bookingsRoutes, myRidesRoutes, ridesRoutes } from "./routes/rides";
 
 const app = express();
 app.use(cors());
@@ -16,8 +17,12 @@ app.get("/health", (req: Request, res: Response) => {
 });
 
 app.use("/auth", authRoutes);
+// Before /me, so meRoutes doesn't answer /me/rides.
+app.use("/me/rides", myRidesRoutes);
 app.use("/me", meRoutes);
 app.use("/places", placesRoutes);
+app.use("/rides", ridesRoutes);
+app.use("/bookings", bookingsRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
