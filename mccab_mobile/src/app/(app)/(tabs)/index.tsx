@@ -1,19 +1,15 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
+import { RideCard } from "@/components/ride-card";
 import { ChoiceChips, SettingsGroup, SettingsRow } from "@/components/settings";
 import { InfoCard, TabScreen } from "@/components/tab-screen";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  RIDE_MODES,
-  campusLabel,
-  rideRoleLabel,
-  type RideMode,
-} from "@/constants/profile-options";
+import { RIDE_MODES, rideRoleLabel, type RideMode } from "@/constants/profile-options";
 import { useThemeColors, type Colors } from "@/constants/theme";
-import { ApiError, type Profile } from "@/lib/api";
-import { firstName, formatPrice } from "@/lib/format";
+import { ApiError, getMyRides, type Ride } from "@/lib/api";
+import { firstName } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 import { driverSetupItems, missingProfileItems } from "@/lib/profile-checklist";
 
@@ -79,8 +75,11 @@ export default function HomeScreen() {
         </SettingsGroup>
       ) : null}
 
-      {driving ? <DrivingCard profile={profile} styles={styles} /> : null}
-      {!driving && profile.rideRole !== "DRIVER" ? <RidingCard styles={styles} /> : null}
+      <NextRide
+        driving={profile.activeMode === "DRIVING"}
+        canOffer={setupItems.length === 0}
+        styles={styles}
+      />
 
       {missing.length > 0 ? (
         <SettingsGroup
@@ -103,37 +102,68 @@ export default function HomeScreen() {
 
 type Styles = ReturnType<typeof createStyles>;
 
-function RidingCard({ styles }: { styles: Styles }) {
+// The student's next ride (offered, or a seat requested or confirmed), or a
+// way to find or offer one. Reloads whenever Home comes into view.
+function NextRide({
+  driving,
+  canOffer,
+  styles,
+}: {
+  driving: boolean;
+  canOffer: boolean;
+  styles: Styles;
+}) {
+  const { withToken } = useProfile();
+  const [next, setNext] = useState<Ride | null | undefined>(undefined);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      withToken(getMyRides)
+        .then(({ driving: offered, riding }) => {
+          const upcoming = [
+            ...offered.filter((ride) => ride.status === "OPEN"),
+            ...riding.filter(
+              (ride) =>
+                ride.status === "OPEN" &&
+                (ride.myBooking?.status === "ACCEPTED" || ride.myBooking?.status === "REQUESTED"),
+            ),
+          ].sort((a, b) => a.departAt.localeCompare(b.departAt));
+          if (active) setNext(upcoming[0] ?? null);
+        })
+        .catch(() => active && setNext(null));
+      return () => {
+        active = false;
+      };
+    }, [withToken]),
+  );
+
+  if (next === undefined) return null;
+  if (next) {
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Your next ride
+        </Text>
+        <RideCard ride={next} />
+      </View>
+    );
+  }
+  if (driving && !canOffer) return null; // "Finish driver setup" above says what to do.
   return (
-    <InfoCard title="Finding a seat is coming soon">
+    <InfoCard title="No upcoming rides">
       <Text style={styles.body}>
-        Soon you'll see drivers near you who are going to your campus, and book a seat.
+        {driving
+          ? "Offer your next trip to campus, and students near you can ask for a seat."
+          : "See who's driving to your campus and ask for a seat."}
       </Text>
       <Pressable
-        onPress={() => router.push("/profile")}
+        onPress={() => router.push(driving ? "/rides/new" : "/rides")}
         accessibilityRole="link"
         style={({ pressed }) => pressed && styles.pressed}
       >
-        <Text style={styles.link}>Set up your profile</Text>
+        <Text style={styles.link}>{driving ? "Offer a ride" : "Find a ride"}</Text>
       </Pressable>
-    </InfoCard>
-  );
-}
-
-function DrivingCard({ profile, styles }: { profile: Profile; styles: Styles }) {
-  const car = profile.vehicle!;
-  const campus = campusLabel(profile.campus);
-  const price = formatPrice(profile.pricePerSeatCents);
-  return (
-    <InfoCard title="Offering rides is coming soon">
-      <Text style={styles.body}>
-        Soon you'll post your trips{campus ? ` to ${campus}` : ""} and riders near you can book
-        your {car.seats} {car.seats === 1 ? "seat" : "seats"}
-        {price ? ` for ${price} each` : ""}.
-      </Text>
-      <Text style={styles.muted}>
-        {[car.color, car.make, car.model].join(" ")} · {car.plate}
-      </Text>
     </InfoCard>
   );
 }
@@ -143,14 +173,20 @@ function createStyles(colors: Colors) {
     padded: {
       padding: 16,
     },
+    section: {
+      gap: 12,
+    },
+    sectionTitle: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
     body: {
       color: colors.textMuted,
       fontSize: 15,
       lineHeight: 21,
-    },
-    muted: {
-      color: colors.textMuted,
-      fontSize: 13,
     },
     link: {
       color: colors.primary,

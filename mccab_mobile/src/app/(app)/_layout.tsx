@@ -67,6 +67,8 @@ function SignedInStack() {
 
       <Stack.Protected guard={termsAccepted && hasRole}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="rides/new" options={{ title: "Offer a ride" }} />
+        <Stack.Screen name="rides/[id]" options={{ title: "Ride" }} />
         <Stack.Screen name="settings/about" options={{ title: "About me" }} />
         <Stack.Screen name="settings/car" options={{ title: "My car" }} />
         <Stack.Screen name="settings/licence" options={{ title: "Driver's licence" }} />

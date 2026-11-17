@@ -29,6 +29,9 @@ type ProfileContextValue = {
   removeInsurance: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  // Runs any signed-in API call with the login token; a 401 signs out.
+  // Stable between renders, so it can be an effect dependency.
+  withToken: <T>(call: (token: string) => Promise<T>) => Promise<T>;
   // Address suggestions for what the student typed (see AddressField).
   searchAddresses: (text: string, signal?: AbortSignal) => Promise<AddressSuggestion[]>;
 };
@@ -110,6 +113,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       await withToken((t) => api.deleteAccount(t, password));
       signOut();
     },
+    withToken,
     searchAddresses: (text, signal) => withToken((t) => api.searchAddresses(t, text, signal)),
   };
 
