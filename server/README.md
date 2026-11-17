@@ -82,15 +82,20 @@ server/
 │   ├── index.ts             # Express app: middleware and routes
 │   ├── lib/
 │   │   ├── auth-token.ts    # create and check login tokens (JWT)
+│   │   ├── dates.ts         # Chicago dates and day ranges
+│   │   ├── driver.ts        # driverStatus, price and seat limits
 │   │   ├── password-strength.ts  # password rules and strength check (zxcvbn)
 │   │   ├── places.ts        # address search (Geoapify) and signed place tokens
-│   │   └── prisma.ts        # shared Prisma client, import it from here
+│   │   ├── prisma.ts        # shared Prisma client, import it from here
+│   │   ├── rides.ts         # how a ride is shown to each student, cancelling rides
+│   │   └── validation.ts    # FieldError and the field parsers
 │   ├── middleware/
 │   │   └── require-auth.ts  # requireAuth: lets only signed-in users through
 │   ├── routes/
 │   │   ├── auth.ts          # /auth endpoints (sign up, sign in, password reset)
 │   │   ├── me.ts            # /me endpoints (the signed-in user's profile and account)
-│   │   └── places.ts        # /places endpoints (address search)
+│   │   ├── places.ts        # /places endpoints (address search)
+│   │   └── rides.ts         # /rides, /bookings and /me/rides endpoints
 │   └── generated/prisma/    # generated client (git-ignored, do not edit)
 ├── .env.example
 ├── package.json
@@ -119,22 +124,49 @@ These need the login token in an `Authorization: Bearer <token>` header. A missi
 
 | Method | Path | Response |
 | --- | --- | --- |
-| `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, with `licence` and `insurance` grouped (or `null`), plus `vehicle` (or `null`), `driverStatus` (`{ready, missing}`: drivers need a licence that hasn't expired and a car) and `stats` (ratings and ride counts, all zero until rides exist). `activeMode` is the mode the student is really in: always `RIDING` for a rider, `DRIVING` for a driver. |
-| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. `activeMode: "DRIVING"` is refused with `400` (`field: "activeMode"`, plus `missing`) unless the role is `DRIVER` or `RIDER_DRIVER` and `driverStatus.ready` is true. Changing `rideRole` switches back to riding. The home address is set with `homePlace`: the `token` of a suggestion from `/places/autocomplete` (`homeAddress`, `homeArea` and the private coordinates all come from it), or `null` to remove it. An invalid or expired token gets `400` with `field: "homePlace"`. `homeArea` can't be set on its own. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
+| `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, with `licence` and `insurance` grouped (or `null`), plus `vehicle` (or `null`), `driverStatus` (`{ready, missing}`: drivers need a licence that hasn't expired and a car) and `stats` (ratings and ride counts, all zero: not calculated from rides yet). `activeMode` is the mode the student is really in: always `RIDING` for a rider, `DRIVING` for a driver. |
+| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. `activeMode: "DRIVING"` is refused with `400` (`field: "activeMode"`, plus `missing`) unless the role is `DRIVER` or `RIDER_DRIVER` and `driverStatus.ready` is true. Changing `rideRole` switches back to riding, and changing it to `RIDER` cancels the student's upcoming rides. The home address is set with `homePlace`: the `token` of a suggestion from `/places/autocomplete` (`homeAddress`, `homeArea` and the private coordinates all come from it), or `null` to remove it. An invalid or expired token gets `400` with `field: "homePlace"`. `homeArea` can't be set on its own. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
 | `POST` | `/me/terms` | Records that the student agreed to the Terms and Conditions (keeps the first date). `200` with `{profile}`. |
 | `PUT` | `/me/vehicle` | Body `{make, model, year?, color, plate, seats}` (1 to 3 seats). Creates or replaces the user's car. `200` with `{profile}`. |
-| `DELETE` | `/me/vehicle` | Removes the car and switches back to riding. `200` with `{profile}`. |
+| `DELETE` | `/me/vehicle` | Removes the car, switches back to riding and cancels the driver's upcoming rides. `200` with `{profile}`. |
 | `PUT` | `/me/licence` | Body `{state, last4, expiresOn}` (`"YYYY-MM-DD"`, not expired). Only the last 4 characters of the number are sent and stored. `200` with `{profile}`. |
-| `DELETE` | `/me/licence` | Removes the licence and switches back to riding. `200` with `{profile}`. |
+| `DELETE` | `/me/licence` | Removes the licence, switches back to riding and cancels the driver's upcoming rides. `200` with `{profile}`. |
 | `PUT` | `/me/insurance` | Body `{provider, policyLast4?, expiresOn}` (not expired). `200` with `{profile}`. |
 | `DELETE` | `/me/insurance` | Removes the insurance details. `200` with `{profile}`. |
 | `POST` | `/me/password` | Body `{currentPassword, newPassword}`. `200` with `{token}`. Signs out every other device; use the new token on this one. |
 | `DELETE` | `/me` | Body `{password}`. `204`. Deletes the account, its car, its reset codes, the rides it posted (with everyone's bookings on them) and its own bookings. |
 | `GET` | `/places/autocomplete?text=` | Address suggestions as the student types. `200` with `{suggestions}`: up to 5 precise US addresses (a building, place or street, not a whole city or ZIP), from within 80 km of downtown Chicago, or from anywhere in the US if Geoapify finds nothing at all in that area. Results are cached for 10 minutes, and Geoapify's free plan can take a few seconds to answer. Each has `title`, `subtitle`, `address`, `area` (neighbourhood or city, never the street) and `token` (signed, valid for 1 hour, send it to `PATCH /me` as `homePlace`; the coordinates are inside it). Text under 3 characters gets an empty list. `429` after 30 searches in a minute, `503` without `GEOAPIFY_API_KEY`, `502` if Geoapify fails. |
 
+### Rides and bookings
+
+Signed-in routes too. Payments happen outside the app: a ride only shows its price per seat. Every ride in a response has this shape (`ride`):
+
+- `id`, `campus`, `direction` (`TO_CAMPUS`/`FROM_CAMPUS`), `departAt` (ISO, UTC), `seatsOffered`, `seatsLeft`, `pricePerSeatCents`, `startArea` (the off-campus end of the trip), `notes`, `status` (`OPEN`/`CANCELLED`/`COMPLETED`).
+- `distanceKm`: from the viewer's home to the ride's start point, rounded to 0.5 km. The start point is the driver's home moved 250 to 500 m in a fixed direction per driver, so the home can't be found from distances. `null` without a home address, or for your own ride. Coordinates are never sent.
+- `isMine`: the viewer is the driver.
+- `driver`: `{id, firstName, phone, vehicle}`. `phone` and `vehicle` (`{make, model, color, plate}`) are `null` unless the viewer's booking is `ACCEPTED` and the ride is open or left less than a day ago, and `phone` also stays `null` if the driver's `phoneVisibility` is `NOBODY`.
+- `myBooking`: the viewer's own `{id, status}`, or `null`.
+- `bookings`: only for the driver, otherwise `null`. Each is `{id, status, createdAt, rider: {id, firstName, area, phone, pickupAddress}}`. `phone` and `pickupAddress` (the rider's home address) are `null` until the driver accepts, and again once the ride is cancelled or left more than a day ago.
+
+A ride becomes `COMPLETED` once `departAt` has passed (checked whenever rides are read), and requests the driver never answered are cancelled. Expected refusals are `{error}` with `403` (not your ride or booking, wrong role), `404` (no such ride or booking) or `409` (full, already asked, already answered, ride cancelled or left).
+
+| Method | Path | Response |
+| --- | --- | --- |
+| `POST` | `/rides` | Body `{direction, departAt, campus?, seats?, pricePerSeatCents?, notes?}`. `departAt` is an ISO date and time with its offset or `Z` (required, `400` without), in the future and at most 30 days ahead (Chicago dates). `campus`, `seats` (default: the car's seats) and the price default to the driver's profile. Needs role `DRIVER` or `RIDER_DRIVER` (`403` otherwise), a licence that hasn't expired and a car, and a home address (`400` otherwise). `201` with `{ride}`. |
+| `GET` | `/rides?campus=&direction=&date=` | Search. Open rides by other drivers that haven't left and still have a seat (or that you already asked to join), up to 50. `campus` defaults to your campus. `date` is a Chicago date (`YYYY-MM-DD`). Nearest to your home first, then soonest. `200` with `{rides}`. |
+| `GET` | `/rides/:id` | `200` with `{ride}`. |
+| `POST` | `/rides/:id/cancel` | Driver only. Cancels an open ride and every requested or accepted booking on it. `200` with `{ride}`. |
+| `POST` | `/rides/:id/bookings` | Ask for a seat. Not on your own ride, not as a `DRIVER`, and you need a home address (your pickup point). Asking again after cancelling reuses the booking; after a decline it's refused. `201` with `{ride}`. |
+| `POST` | `/bookings/:id/accept` | Driver only. Locks the ride while counting free seats, so two accepts can't both take the last seat (`409` for the second). `200` with `{ride}`. |
+| `POST` | `/bookings/:id/decline` | Driver only, for a request still waiting. `200` with `{ride}`. |
+| `POST` | `/bookings/:id/cancel` | The rider cancels their request or confirmed seat before the ride leaves. `200` with `{ride}`. |
+| `GET` | `/me/rides` | `200` with `{driving, riding}`: rides you offer and rides you asked to join, from today (Chicago time) on, soonest first. Includes cancelled and declined ones. |
+
+Removing your car or licence, or switching your role to `RIDER`, cancels your upcoming rides (and their bookings).
+
 To protect a new route, add `requireAuth` (see `middleware/require-auth.ts`) and read the user with `currentUserId(res)`.
 
-Ride and booking endpoints are not built yet. When you add a route, add it to these tables.
+When you add a route, add it to these tables.
 
 ### Using the database in a route
 

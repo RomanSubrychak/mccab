@@ -195,7 +195,9 @@ model Ride {
   // The off-campus end of the trip: where a TO_CAMPUS ride starts and a
   // FROM_CAMPUS ride ends. Copied from the driver's home when the ride is posted.
   // startArea is public (neighbourhood or city). startLat/startLng are private,
-  // only used for distance, and never sent to the app.
+  // never sent to the app, and only used for distance. They're the driver's home
+  // moved 250 to 500 m (see approximateStart in lib/rides.ts), because distances
+  // are shown to other students.
   startArea         String
   startLat          Float
   startLng          Float
