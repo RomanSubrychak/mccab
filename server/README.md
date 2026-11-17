@@ -35,6 +35,7 @@ Set these in `server/.env`. This file is git-ignored, so never commit it.
 | `SMTP_PORT` | `587` | Mail server port. Defaults to `587`. |
 | `SMTP_USER` | `you@gmail.com` | Mail server login. |
 | `SMTP_PASS` | `abcdefghijklmnop` | Mail server password. For Gmail, use an [app password](https://support.google.com/accounts/answer/185833), not your normal password. |
+| `GEOAPIFY_API_KEY` | `0123456789abcdef0123456789abcdef` | Key for address search (`GET /places/autocomplete`). Free at [myprojects.geoapify.com](https://myprojects.geoapify.com), no card needed (3,000 searches a day). If empty, address search answers `503` and the app says it isn't set up. Never put it in the app: it stays on the server. |
 | `EMAIL_FROM` | `you@gmail.com` | Sender shown on the email. Defaults to `SMTP_USER`. Use a plain address: school mail filters (Microsoft 365) dropped emails with a brand name like `MCCab <you@gmail.com>` on a personal Gmail. |
 
 ### Generating `JWT_SECRET`
@@ -82,12 +83,14 @@ server/
 │   ├── lib/
 │   │   ├── auth-token.ts    # create and check login tokens (JWT)
 │   │   ├── password-strength.ts  # password rules and strength check (zxcvbn)
+│   │   ├── places.ts        # address search (Geoapify) and signed place tokens
 │   │   └── prisma.ts        # shared Prisma client, import it from here
 │   ├── middleware/
 │   │   └── require-auth.ts  # requireAuth: lets only signed-in users through
 │   ├── routes/
 │   │   ├── auth.ts          # /auth endpoints (sign up, sign in, password reset)
-│   │   └── me.ts            # /me endpoints (the signed-in user's profile and account)
+│   │   ├── me.ts            # /me endpoints (the signed-in user's profile and account)
+│   │   └── places.ts        # /places endpoints (address search)
 │   └── generated/prisma/    # generated client (git-ignored, do not edit)
 ├── .env.example
 ├── package.json
@@ -117,7 +120,7 @@ These need the login token in an `Authorization: Bearer <token>` header. A missi
 | Method | Path | Response |
 | --- | --- | --- |
 | `GET` | `/me` | `200` with `{profile}`: every `User` field below except `passwordHash` and `tokenVersion`, with `licence` and `insurance` grouped (or `null`), plus `vehicle` (or `null`), `driverStatus` (`{ready, missing}`: drivers need a licence that hasn't expired and a car) and `stats` (ratings and ride counts, all zero until rides exist). `activeMode` is the mode the student is really in: always `RIDING` for a rider, `DRIVING` for a driver. |
-| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. `activeMode: "DRIVING"` is refused with `400` (`field: "activeMode"`, plus `missing`) unless the role is `DRIVER` or `RIDER_DRIVER` and `driverStatus.ready` is true. Changing `rideRole` switches back to riding. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
+| `PATCH` | `/me` | Body: any profile fields to change (see `PROFILE_FIELDS` in `routes/me.ts`). `200` with `{profile}`. `activeMode: "DRIVING"` is refused with `400` (`field: "activeMode"`, plus `missing`) unless the role is `DRIVER` or `RIDER_DRIVER` and `driverStatus.ready` is true. Changing `rideRole` switches back to riding. The home address is set with `homePlace`: the `token` of a suggestion from `/places/autocomplete` (`homeAddress`, `homeArea` and the private coordinates all come from it), or `null` to remove it. An invalid or expired token gets `400` with `field: "homePlace"`. `homeArea` can't be set on its own. Email and password can't be changed here. Empty text clears an optional field. Phones are US-only and stored as `+1XXXXXXXXXX`. Times are `"HH:MM"` (24-hour). |
 | `POST` | `/me/terms` | Records that the student agreed to the Terms and Conditions (keeps the first date). `200` with `{profile}`. |
 | `PUT` | `/me/vehicle` | Body `{make, model, year?, color, plate, seats}` (1 to 3 seats). Creates or replaces the user's car. `200` with `{profile}`. |
 | `DELETE` | `/me/vehicle` | Removes the car and switches back to riding. `200` with `{profile}`. |
@@ -127,6 +130,7 @@ These need the login token in an `Authorization: Bearer <token>` header. A missi
 | `DELETE` | `/me/insurance` | Removes the insurance details. `200` with `{profile}`. |
 | `POST` | `/me/password` | Body `{currentPassword, newPassword}`. `200` with `{token}`. Signs out every other device; use the new token on this one. |
 | `DELETE` | `/me` | Body `{password}`. `204`. Deletes the account, its car and its reset codes. |
+| `GET` | `/places/autocomplete?text=` | Address suggestions as the student types. `200` with `{suggestions}`: up to 5 precise US addresses (a building, place or street, not a whole city or ZIP), from within 80 km of downtown Chicago, or from anywhere in the US if Geoapify finds nothing at all in that area. Results are cached for 10 minutes, and Geoapify's free plan can take a few seconds to answer. Each has `title`, `subtitle`, `address`, `area` (neighbourhood or city, never the street) and `token` (signed, valid for 1 hour, send it to `PATCH /me` as `homePlace`; the coordinates are inside it). Text under 3 characters gets an empty list. `429` after 30 searches in a minute, `503` without `GEOAPIFY_API_KEY`, `502` if Geoapify fails. |
 
 To protect a new route, add `requireAuth` (see `middleware/require-auth.ts`) and read the user with `currentUserId(res)`.
 
@@ -151,7 +155,7 @@ Current models (see `prisma/schema.prisma`):
 
 | Model | Fields |
 | --- | --- |
-| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`RIDER_DRIVER`, `null` until the student picks one), `activeMode` (`RIDING`/`DRIVING`, what a `RIDER_DRIVER` is doing now), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `licenceState`, `licenceLast4`, `licenceExpiresOn`, `insuranceProvider`, `insurancePolicyLast4`, `insuranceExpiresOn` (only the last 4 characters of licence and policy numbers are stored), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea`, `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews`. Email verification: `emailVerifiedAt` (null until verified; unverified accounts can't sign in), `verificationCodeHash`, `verificationCodeExpiresAt`, `verificationCodeSentAt`, `verificationAttempts` |
+| `User` | `id` (auto-increment), `email` (unique), `name`, `passwordHash` (bcrypt hash, never returned by the API), `tokenVersion` (goes up on every password change or reset, which revokes older login tokens), `createdAt`. Profile: `phone`, `bio`, `major`, `graduationYear`, `rideRole` (`RIDER`/`DRIVER`/`RIDER_DRIVER`, `null` until the student picks one), `activeMode` (`RIDING`/`DRIVING`, what a `RIDER_DRIVER` is doing now), `termsAcceptedAt` (when the student agreed to the terms, or `null`), `licenceState`, `licenceLast4`, `licenceExpiresOn`, `insuranceProvider`, `insurancePolicyLast4`, `insuranceExpiresOn` (only the last 4 characters of licence and policy numbers are stored), `campus` (`CHICAGO_MAIN`/`CHICAGO_DOWNTOWN`/`NAPERVILLE`/`EVERGREEN_PARK`), `homeArea` (public: neighbourhood or city only), `homeAddress`, `homeLat`, `homeLng` (private: the exact address, only returned to its owner; the coordinates are never returned), `rideDays`, `arriveBy`, `leaveAt`, `pricePerSeatCents`, `chatPreference`, `musicOk`, `smokingOk`, `emergencyContactName`, `emergencyContactPhone`, `phoneVisibility`, `notifyRideUpdates`, `notifyMessages`, `notifyNews`. Email verification: `emailVerifiedAt` (null until verified; unverified accounts can't sign in), `verificationCodeHash`, `verificationCodeExpiresAt`, `verificationCodeSentAt`, `verificationAttempts` |
 | `Vehicle` | `id`, `userId` (unique: one car per user), `make`, `model`, `year`, `color`, `plate`, `seats` (1 to 3), `createdAt`, `updatedAt`. Deleted when the user is deleted. |
 | `PasswordReset` | `id`, `userId`, `tokenHash` (unique SHA-256 of the reset code), `expiresAt`, `usedAt`, `createdAt`. Deleted when the user is deleted. |
 

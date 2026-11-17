@@ -5,6 +5,7 @@ import cors from "cors";
 
 import { authRoutes } from "./routes/auth";
 import { meRoutes } from "./routes/me";
+import { placesRoutes } from "./routes/places";
 
 const app = express();
 app.use(cors());
@@ -16,6 +17,7 @@ app.get("/health", (req: Request, res: Response) => {
 
 app.use("/auth", authRoutes);
 app.use("/me", meRoutes);
+app.use("/places", placesRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

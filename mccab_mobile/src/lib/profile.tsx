@@ -3,6 +3,7 @@ import { createContext, use, useCallback, useEffect, useState, type ReactNode } 
 import * as api from "@/lib/api";
 import {
   ApiError,
+  type AddressSuggestion,
   type Insurance,
   type Licence,
   type Profile,
@@ -28,6 +29,8 @@ type ProfileContextValue = {
   removeInsurance: () => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
+  // Address suggestions for what the student typed (see AddressField).
+  searchAddresses: (text: string, signal?: AbortSignal) => Promise<AddressSuggestion[]>;
 };
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
@@ -107,6 +110,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       await withToken((t) => api.deleteAccount(t, password));
       signOut();
     },
+    searchAddresses: (text, signal) => withToken((t) => api.searchAddresses(t, text, signal)),
   };
 
   return <ProfileContext value={value}>{children}</ProfileContext>;

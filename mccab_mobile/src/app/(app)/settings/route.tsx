@@ -2,16 +2,17 @@ import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
+import { AddressField } from "@/components/address-field";
 import { FormScreen, WithProfile, useSaveHandler } from "@/components/form-screen";
 import { ChoiceChips } from "@/components/settings";
 import { TextField } from "@/components/text-field";
 import { CAMPUSES, WEEKDAYS, type Campus, type Weekday } from "@/constants/profile-options";
 import { useThemeColors, type Colors } from "@/constants/theme";
-import type { Profile } from "@/lib/api";
+import type { AddressSuggestion, Profile, ProfileChanges } from "@/lib/api";
 import { formatTime, parseTime } from "@/lib/format";
 import { useProfile } from "@/lib/profile";
 
-const FIELDS = ["campus", "homeArea", "rideDays", "arriveBy", "leaveAt"] as const;
+const FIELDS = ["campus", "homePlace", "rideDays", "arriveBy", "leaveAt"] as const;
 type Field = (typeof FIELDS)[number];
 
 export default function RouteScreen() {
@@ -25,7 +26,10 @@ function RouteForm({ profile }: { profile: Profile }) {
   const { saving, formError, fieldErrors, save, clearFieldError } = useSaveHandler(FIELDS);
 
   const [campus, setCampus] = useState<Campus | null>(profile.campus);
-  const [homeArea, setHomeArea] = useState(profile.homeArea ?? "");
+  // The text in the address field, and the suggestion it came from (null until
+  // the student picks one). Typed text that wasn't picked is never saved.
+  const [address, setAddress] = useState(profile.homeAddress ?? "");
+  const [picked, setPicked] = useState<AddressSuggestion | null>(null);
   const [rideDays, setRideDays] = useState<Weekday[]>(profile.rideDays);
   const [arriveBy, setArriveBy] = useState(formatTime(profile.arriveBy) ?? "");
   const [leaveAt, setLeaveAt] = useState(formatTime(profile.leaveAt) ?? "");
@@ -37,9 +41,19 @@ function RouteForm({ profile }: { profile: Profile }) {
     if (arriveBy.trim() && !arrive) errors.arriveBy = "Enter a time like 8:30 AM.";
     if (leaveAt.trim() && !leave) errors.leaveAt = "Enter a time like 5:15 PM.";
 
-    save(errors, () =>
-      update({ campus, homeArea: homeArea.trim(), rideDays, arriveBy: arrive, leaveAt: leave }),
-    );
+    const changes: ProfileChanges = { campus, rideDays, arriveBy: arrive, leaveAt: leave };
+    const text = address.trim();
+    if (picked && text === picked.address) {
+      changes.homePlace = picked.token;
+    } else if (!text) {
+      // An emptied field removes the saved address. An old free-text area (with
+      // no address) starts out empty here, so it stays until an address is picked.
+      if (profile.homeAddress) changes.homePlace = null;
+    } else if (text !== profile.homeAddress) {
+      errors.homePlace = "Choose your address from the list.";
+    }
+
+    save(errors, () => update(changes));
   }
 
   return (
@@ -84,17 +98,22 @@ function RouteForm({ profile }: { profile: Profile }) {
         {fieldErrors.campus ? <Text style={styles.error}>{fieldErrors.campus}</Text> : null}
       </View>
 
-      <TextField
-        label="Home area"
-        value={homeArea}
+      <AddressField
+        label="Home address"
+        value={address}
         onChangeText={(value) => {
-          setHomeArea(value);
-          clearFieldError("homeArea");
+          setAddress(value);
+          setPicked(null);
+          clearFieldError("homePlace");
         }}
-        error={fieldErrors.homeArea}
-        hint="Your neighbourhood or nearest intersection. Never your full address."
-        placeholder="Pilsen, or Cermak & Western"
-        autoCapitalize="words"
+        onSelect={(suggestion) => {
+          setAddress(suggestion.address);
+          setPicked(suggestion);
+          clearFieldError("homePlace");
+        }}
+        error={fieldErrors.homePlace}
+        hint={addressHint(profile, picked)}
+        placeholder="Start typing, like 1234 W 18th St"
       />
 
       <ChoiceChips
@@ -141,6 +160,19 @@ function RouteForm({ profile }: { profile: Profile }) {
       </View>
     </FormScreen>
   );
+}
+
+// Under the address field: who sees what, and the old free-text area if the
+// student hasn't replaced it with an address yet.
+function addressHint(profile: Profile, picked: AddressSuggestion | null): string {
+  const area = picked?.area ?? (profile.homeAddress ? profile.homeArea : null);
+  if (area) {
+    return `Only you see your full address. Other students only see "${area}".`;
+  }
+  if (profile.homeArea) {
+    return `You entered "${profile.homeArea}" before. Search for your address to replace it. Only you see the full address.`;
+  }
+  return "Only you see your full address. Other students only see your neighbourhood.";
 }
 
 function createStyles(colors: Colors) {

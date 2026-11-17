@@ -162,6 +162,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 Paste the output into `server/.env` as `JWT_SECRET=<the output>`, replacing `change-me`.
 
+For address search (the home address on My route), get a free key at [myprojects.geoapify.com](https://myprojects.geoapify.com) (no card needed): sign up, create a project, and copy its API key into `server/.env` as `GEOAPIFY_API_KEY=<the key>`. Without it, everything else works but address search says it isn't set up. The server reads `.env` only when it starts, so restart it after changing the file.
+
 Create the tables and start the server:
 
 ```bash

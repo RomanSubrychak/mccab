@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { Prisma } from "../generated/prisma/client";
 import { signToken } from "../lib/auth-token";
 import { BCRYPT_ROUNDS, MAX_PASSWORD_BYTES, validateNewPassword } from "../lib/password-strength";
+import { verifyPlaceToken } from "../lib/places";
 import { prisma } from "../lib/prisma";
 import { currentUserId, requireAuth } from "../middleware/require-auth";
 
@@ -45,6 +46,8 @@ const PROFILE_SELECT = {
   termsAcceptedAt: true,
   campus: true,
   homeArea: true,
+  // Private, but this is the student's own profile. homeLat/homeLng are never sent.
+  homeAddress: true,
   rideDays: true,
   arriveBy: true,
   leaveAt: true,
@@ -178,7 +181,6 @@ const PROFILE_FIELDS: Record<string, (value: unknown) => unknown> = {
   // Checked again against the role, licence and car in PATCH /me.
   activeMode: (v) => oneOf("activeMode", v, RIDE_MODES),
   campus: (v) => optionalOneOf("campus", v, CAMPUSES),
-  homeArea: (v) => optionalText("homeArea", v, 80),
   rideDays: (v) => weekdays("rideDays", v),
   arriveBy: (v) => optionalTime("arriveBy", v),
   leaveAt: (v) => optionalTime("leaveAt", v),
@@ -200,6 +202,25 @@ const PROFILE_FIELDS: Record<string, (value: unknown) => unknown> = {
   notifyMessages: (v) => bool("notifyMessages", v),
   notifyNews: (v) => bool("notifyNews", v),
 };
+
+// The home address: a suggestion token from GET /places/autocomplete, or null to
+// clear it. The address, area and coordinates all come from the signed token, so
+// the public area always matches the private address. homeArea can't be set alone.
+function homePlace(value: unknown) {
+  if (value === null) {
+    return { homeAddress: null, homeArea: null, homeLat: null, homeLng: null };
+  }
+  const place = verifyPlaceToken(value);
+  if (!place) {
+    throw new FieldError("homePlace", "Search for your address and choose it from the list.");
+  }
+  return {
+    homeAddress: place.address,
+    homeArea: place.area,
+    homeLat: place.lat,
+    homeLng: place.lng,
+  };
+}
 
 function sendFieldError(res: Response, err: unknown): boolean {
   if (err instanceof FieldError) {
@@ -319,7 +340,7 @@ meRoutes.get("/", async (req: Request, res: Response) => {
   res.json({ profile });
 });
 
-// PATCH /me  { any of PROFILE_FIELDS } -> 200 { profile }
+// PATCH /me  { any of PROFILE_FIELDS, homePlace } -> 200 { profile }
 // Only the fields sent are changed.
 meRoutes.patch("/", async (req: Request, res: Response) => {
   const body = req.body;
@@ -331,6 +352,10 @@ meRoutes.patch("/", async (req: Request, res: Response) => {
   const data: Record<string, unknown> = {};
   try {
     for (const [field, value] of Object.entries(body)) {
+      if (field === "homePlace") {
+        Object.assign(data, homePlace(value));
+        continue;
+      }
       const parse = PROFILE_FIELDS[field];
       if (!parse) {
         res.status(400).json({ error: `"${field}" can't be changed here.`, field });
