@@ -568,7 +568,8 @@ meRoutes.post("/password", async (req: Request, res: Response) => {
 });
 
 // DELETE /me  { password } -> 204
-// Deletes the account, its car and its reset codes. This can't be undone.
+// Deletes the account, its car, its reset codes, the rides it posted (with
+// everyone's bookings on them) and its own bookings. This can't be undone.
 meRoutes.delete("/", async (req: Request, res: Response) => {
   const userId = currentUserId(res);
   if (!(await passwordMatches(userId, req.body?.password))) {

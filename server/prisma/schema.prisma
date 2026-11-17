@@ -23,6 +23,8 @@ model User {
   createdAt      DateTime        @default(now())
   passwordResets PasswordReset[]
   vehicle        Vehicle?
+  ridesDriven    Ride[]
+  bookings       Booking[]
 
   // Null until the user enters the code from their verification email.
   // Unverified accounts are inactive: they can't sign in.
@@ -140,6 +142,26 @@ enum ChatPreference {
   CHATTY
 }
 
+// A ride goes from the driver's home area to the campus (TO_CAMPUS), or from
+// the campus back to it (FROM_CAMPUS).
+enum RideDirection {
+  TO_CAMPUS
+  FROM_CAMPUS
+}
+
+enum RideStatus {
+  OPEN
+  CANCELLED // By the driver. Its bookings are cancelled too.
+  COMPLETED // Set by the server once departAt has passed
+}
+
+enum BookingStatus {
+  REQUESTED // Waiting for the driver
+  ACCEPTED // Seat confirmed: contact details are shared
+  DECLINED // By the driver
+  CANCELLED // By the rider, or because the ride was cancelled
+}
+
 // Who can see the user's phone number.
 enum PhoneVisibility {
   CONFIRMED_RIDES // Only people in a confirmed ride with them
@@ -156,4 +178,50 @@ model PasswordReset {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// One trip a driver offers to or from a campus, on one date (no repeating
+// rides yet). "Full" isn't stored: free seats are seatsOffered minus the
+// ACCEPTED bookings, so they can't fall out of sync. Payment happens outside
+// the app; the price is only shown.
+model Ride {
+  id                Int           @id @default(autoincrement())
+  driverId          Int
+  campus            Campus
+  direction         RideDirection
+  departAt          DateTime
+  seatsOffered      Int // 1 to 3, and at most the car's seats when posted
+  pricePerSeatCents Int
+  // The off-campus end of the trip: where a TO_CAMPUS ride starts and a
+  // FROM_CAMPUS ride ends. Copied from the driver's home when the ride is posted.
+  // startArea is public (neighbourhood or city). startLat/startLng are private,
+  // only used for distance, and never sent to the app.
+  startArea         String
+  startLat          Float
+  startLng          Float
+  notes             String? // Up to 200 characters
+  status            RideStatus    @default(OPEN)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  driver            User          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  bookings          Booking[]
+
+  @@index([campus, departAt])
+  @@index([driverId])
+}
+
+// One rider's seat on one ride. A rider has at most one booking per ride;
+// asking again after cancelling reuses it.
+model Booking {
+  id        Int           @id @default(autoincrement())
+  rideId    Int
+  riderId   Int
+  status    BookingStatus @default(REQUESTED)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  ride      Ride          @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  rider     User          @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@unique([rideId, riderId])
+  @@index([riderId])
 }
